@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X } from 'lucide-react-native';
-import { supabase, Wallet as WalletType, WalletTransaction } from '@/lib/supabase';
+import { supabase, Wallet as WalletType, WalletTransaction, Commission } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
 export default function WalletScreen() {
   const { vendor } = useAuth();
   const [wallet, setWallet] = useState<WalletType | null>(null);
+  const [commissions, setCommissions] = useState<Commission[]>([]);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -16,6 +17,7 @@ export default function WalletScreen() {
   useEffect(() => {
     if (vendor) {
       loadWallet();
+      loadCommissions();
       loadTransactions();
     } else {
       setLoading(false);
@@ -39,6 +41,24 @@ export default function WalletScreen() {
       console.error('Error loading wallet:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCommissions = async () => {
+    if (!vendor) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('commissions')
+        .select('*')
+        .eq('vendor_id', vendor.vendor_id)
+        .order('commission_date', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setCommissions(data || []);
+    } catch (error) {
+      console.error('Error loading commissions:', error);
     }
   };
 
@@ -169,11 +189,58 @@ export default function WalletScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Commission Credits from Admin</Text>
+          {commissions.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No commissions yet</Text>
+              <Text style={styles.emptySubtext}>Admin will add commission credits</Text>
+            </View>
+          )}
+
+          {commissions.map((commission) => (
+            <View key={commission.id} style={styles.transactionCard}>
+              <View style={styles.transactionHeader}>
+                <View
+                  style={[
+                    styles.transactionIcon,
+                    { backgroundColor: '#D1FAE5' }
+                  ]}
+                >
+                  <ArrowDownLeft size={20} color="#10B981" />
+                </View>
+                <View style={styles.transactionDetails}>
+                  <Text style={styles.transactionDescription}>
+                    {commission.notes || 'Commission Credit'}
+                  </Text>
+                  <Text style={styles.transactionDate}>
+                    {new Date(commission.commission_date).toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.transactionAmount}>
+                  <Text
+                    style={[
+                      styles.transactionAmountText,
+                      { color: '#10B981' }
+                    ]}
+                  >
+                    +₹{parseFloat(commission.commission_amount).toLocaleString('en-IN')}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Transaction History</Text>
           {transactions.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No transactions yet</Text>
-              <Text style={styles.emptySubtext}>Add your first credit to get started</Text>
+              <Text style={styles.emptySubtext}>Transactions will appear here</Text>
             </View>
           )}
 

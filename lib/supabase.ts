@@ -71,3 +71,14 @@ export type Vendor = {
   created_at: string;
   updated_at: string;
 };
+
+export type Commission = {
+  id: string;
+  vendor_id: string;
+  commission_amount: string;
+  commission_date: string;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
