@@ -1,19 +1,20 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'expo-router';
 
 export default function AuthScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, signUp } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!username || !password) {
+      Alert.alert('Error', 'Please fill in username and password');
       return;
     }
 
@@ -22,15 +23,21 @@ export default function AuthScreen() {
       return;
     }
 
+    if (isSignUp && !companyName) {
+      Alert.alert('Error', 'Please enter your company name');
+      return;
+    }
+
     setLoading(true);
     try {
       if (isSignUp) {
-        await signUp(email, password);
+        await signUp(username, password, companyName, '', '');
         Alert.alert('Success', 'Account created! Please sign in.');
         setIsSignUp(false);
         setPassword('');
+        setCompanyName('');
       } else {
-        await signIn(email, password);
+        await signIn(username, password);
         router.replace('/(tabs)');
       }
     } catch (error: any) {
@@ -45,66 +52,85 @@ export default function AuthScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Vendor Management</Text>
-          <Text style={styles.subtitle}>Manage your fleet and drivers</Text>
-        </View>
-
-        <View style={styles.form}>
-          <Text style={styles.formTitle}>{isSignUp ? 'Create Account' : 'Welcome Back'}</Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="your@email.com"
-              placeholderTextColor="#9CA3AF"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              editable={!loading}
-            />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Vendor Management</Text>
+            <Text style={styles.subtitle}>Manage your fleet and drivers</Text>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor="#9CA3AF"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              editable={!loading}
-            />
+          <View style={styles.form}>
+            <Text style={styles.formTitle}>{isSignUp ? 'Create Account' : 'Welcome Back'}</Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Username</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter username"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                value={username}
+                onChangeText={setUsername}
+                editable={!loading}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+                editable={!loading}
+              />
+            </View>
+
+            {isSignUp && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Company Name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your company name"
+                  placeholderTextColor="#9CA3AF"
+                  value={companyName}
+                  onChangeText={setCompanyName}
+                  editable={!loading}
+                />
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={loading}
+            >
+              <Text style={styles.submitButtonText}>
+                {loading ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Sign In'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.toggleButton}
+              onPress={() => {
+                setIsSignUp(!isSignUp);
+                setPassword('');
+                setCompanyName('');
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.toggleButtonText}>
+                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              </Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            <Text style={styles.submitButtonText}>
-              {loading ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Sign In'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => {
-              setIsSignUp(!isSignUp);
-              setPassword('');
-            }}
-            disabled={loading}
-          >
-            <Text style={styles.toggleButtonText}>
-              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-            </Text>
-          </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -114,9 +140,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingVertical: 24,
+  },
+  content: {
     paddingHorizontal: 24,
   },
   header: {
