@@ -8,7 +8,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [vendorId, setVendorId] = useState<string | null>(null);
+  const [, setVendorId] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [wallet, setWallet] = useState<WalletType | null>(null);
@@ -47,8 +47,10 @@ export default function Dashboard() {
         vendor = newVendor;
       }
 
-      setVendorId(vendor.id);
-      await loadAllData(vendor.id);
+      if (vendor) {
+        setVendorId(vendor.id);
+        await loadAllData(vendor.id);
+      }
     } catch (error) {
       console.error('Error initializing:', error);
     } finally {

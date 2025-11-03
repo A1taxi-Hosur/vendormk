@@ -51,8 +51,10 @@ export default function Drivers() {
         vendor = newVendor;
       }
 
-      setVendorId(vendor.id);
-      await loadDrivers(vendor.id);
+      if (vendor) {
+        setVendorId(vendor.id);
+        await loadDrivers(vendor.id);
+      }
     } catch (error) {
       console.error('Error initializing:', error);
     } finally {

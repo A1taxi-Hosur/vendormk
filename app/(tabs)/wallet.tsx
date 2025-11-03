@@ -46,9 +46,11 @@ export default function WalletScreen() {
         vendor = newVendor;
       }
 
-      setVendorId(vendor.id);
-      await loadWallet(vendor.id);
-      await loadTransactions(vendor.id);
+      if (vendor) {
+        setVendorId(vendor.id);
+        await loadWallet(vendor.id);
+        await loadTransactions(vendor.id);
+      }
     } catch (error) {
       console.error('Error initializing:', error);
     } finally {
@@ -128,39 +130,6 @@ export default function WalletScreen() {
     }
   };
 
-  const handleAddDebit = async (amount: number, desc: string, driverId?: string) => {
-    if (!vendorId || !wallet) {
-      Alert.alert('Error', 'Wallet not initialized');
-      return;
-    }
-
-    if (parseFloat(wallet.balance) < amount) {
-      Alert.alert('Error', 'Insufficient balance');
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('wallet_transactions')
-        .insert({
-          wallet_id: wallet.id,
-          vendor_id: vendorId,
-          driver_id: driverId || null,
-          transaction_type: 'debit',
-          amount: amount,
-          description: desc,
-          transaction_date: new Date().toISOString().split('T')[0],
-        });
-
-      if (error) throw error;
-
-      Alert.alert('Success', 'Commission deducted successfully');
-      await loadWallet(vendorId);
-      await loadTransactions(vendorId);
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    }
-  };
 
   const quickAmounts = [1000, 5000, 10000, 25000];
 

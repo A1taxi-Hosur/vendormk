@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { TrendingUp, TrendingDown, IndianRupee, Calendar, Download } from 'lucide-react-native';
+import { TrendingUp, IndianRupee, Download } from 'lucide-react-native';
 
 export default function Earnings() {
   const earningsData = {
@@ -59,7 +59,7 @@ export default function Earnings() {
               </View>
             </View>
             <Text style={styles.cardAmount}>₹{earningsData.today.toLocaleString()}</Text>
-            <Text style={styles.cardLabel}>Today's Earnings</Text>
+            <Text style={styles.cardLabel}>Today&apos;s Earnings</Text>
             <Text style={styles.cardSubLabel}>₹{earningsData.yesterday.toLocaleString()} yesterday</Text>
           </View>
 

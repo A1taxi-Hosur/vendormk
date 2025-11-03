@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
-import { Search, Plus, X, Car, Trash2 } from 'lucide-react-native';
+import { Search, Plus, X, Trash2 } from 'lucide-react-native';
 import { supabase, Vehicle, Driver } from '@/lib/supabase';
 
 export default function Fleet() {
@@ -54,9 +54,11 @@ export default function Fleet() {
         vendor = newVendor;
       }
 
-      setVendorId(vendor.id);
-      await loadVehicles(vendor.id);
-      await loadDrivers(vendor.id);
+      if (vendor) {
+        setVendorId(vendor.id);
+        await loadVehicles(vendor.id);
+        await loadDrivers(vendor.id);
+      }
     } catch (error) {
       console.error('Error initializing:', error);
     } finally {
