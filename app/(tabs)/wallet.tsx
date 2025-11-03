@@ -1,131 +1,373 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, CreditCard, History, IndianRupee } from 'lucide-react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
+import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X } from 'lucide-react-native';
+import { supabase, Wallet as WalletType, WalletTransaction } from '@/lib/supabase';
 
 export default function WalletScreen() {
-  const walletData = {
-    balance: 45000,
-    pendingCommission: 2890,
-    lastRecharge: 10000,
-    totalCommissionPaid: 46750,
+  const [wallet, setWallet] = useState<WalletType | null>(null);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [vendorId, setVendorId] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [creditAmount, setCreditAmount] = useState('');
+  const [description, setDescription] = useState('');
+
+  useEffect(() => {
+    initializeAndLoadWallet();
+  }, []);
+
+  const initializeAndLoadWallet = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      let { data: vendor } = await supabase
+        .from('vendors')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!vendor) {
+        const { data: newVendor, error } = await supabase
+          .from('vendors')
+          .insert({
+            user_id: user.id,
+            name: user.email?.split('@')[0] || 'Vendor',
+            email: user.email || '',
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        vendor = newVendor;
+      }
+
+      setVendorId(vendor.id);
+      await loadWallet(vendor.id);
+      await loadTransactions(vendor.id);
+    } catch (error) {
+      console.error('Error initializing:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const transactions = [
-    { id: 1, type: 'debit', amount: 1250, description: 'Commission Payment - Week 3', date: '2025-01-15 10:30 AM', status: 'completed' },
-    { id: 2, type: 'credit', amount: 10000, description: 'Wallet Recharge', date: '2025-01-14 02:15 PM', status: 'completed' },
-    { id: 3, type: 'debit', amount: 1180, description: 'Commission Payment - Week 2', date: '2025-01-08 11:45 AM', status: 'completed' },
-    { id: 4, type: 'credit', amount: 15000, description: 'Wallet Recharge', date: '2025-01-05 09:20 AM', status: 'completed' },
-    { id: 5, type: 'debit', amount: 1340, description: 'Commission Payment - Week 1', date: '2025-01-01 10:00 AM', status: 'completed' },
-  ];
+  const loadWallet = async (vId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('vendor_id', vId)
+        .maybeSingle();
 
-  const quickRechargeAmounts = [5000, 10000, 15000, 25000];
-
-  const getTransactionIcon = (type: string) => {
-    return type === 'credit' ? 
-      <ArrowDownLeft size={16} color="#10B981" /> : 
-      <ArrowUpRight size={16} color="#EF4444" />;
+      if (error) throw error;
+      setWallet(data);
+    } catch (error) {
+      console.error('Error loading wallet:', error);
+    }
   };
+
+  const loadTransactions = async (vId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .eq('vendor_id', vId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setTransactions(data || []);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    }
+  };
+
+  const handleAddCredit = async () => {
+    if (!vendorId || !wallet) {
+      Alert.alert('Error', 'Wallet not initialized');
+      return;
+    }
+
+    if (!creditAmount || parseFloat(creditAmount) <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+
+    if (!description.trim()) {
+      Alert.alert('Error', 'Please enter a description');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('wallet_transactions')
+        .insert({
+          wallet_id: wallet.id,
+          vendor_id: vendorId,
+          transaction_type: 'credit',
+          amount: parseFloat(creditAmount),
+          description: description,
+          transaction_date: new Date().toISOString().split('T')[0],
+        });
+
+      if (error) throw error;
+
+      Alert.alert('Success', 'Credit added successfully');
+      setModalVisible(false);
+      setCreditAmount('');
+      setDescription('');
+      await loadWallet(vendorId);
+      await loadTransactions(vendorId);
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const handleAddDebit = async (amount: number, desc: string, driverId?: string) => {
+    if (!vendorId || !wallet) {
+      Alert.alert('Error', 'Wallet not initialized');
+      return;
+    }
+
+    if (parseFloat(wallet.balance) < amount) {
+      Alert.alert('Error', 'Insufficient balance');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('wallet_transactions')
+        .insert({
+          wallet_id: wallet.id,
+          vendor_id: vendorId,
+          driver_id: driverId || null,
+          transaction_type: 'debit',
+          amount: amount,
+          description: desc,
+          transaction_date: new Date().toISOString().split('T')[0],
+        });
+
+      if (error) throw error;
+
+      Alert.alert('Success', 'Commission deducted successfully');
+      await loadWallet(vendorId);
+      await loadTransactions(vendorId);
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const quickAmounts = [1000, 5000, 10000, 25000];
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Wallet</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading wallet...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Wallet</Text>
-        <Text style={styles.headerSubtitle}>Manage commission payments</Text>
+        <Text style={styles.headerSubtitle}>Manage your balance</Text>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Wallet Balance Card */}
         <View style={styles.balanceCard}>
           <View style={styles.balanceHeader}>
-            <Wallet size={32} color="#1E40AF" />
-            <TouchableOpacity style={styles.rechargeButton}>
+            <Wallet size={32} color="#DC2626" />
+            <TouchableOpacity
+              style={styles.rechargeButton}
+              onPress={() => setModalVisible(true)}
+            >
               <Plus size={16} color="#FFFFFF" />
-              <Text style={styles.rechargeButtonText}>Recharge</Text>
+              <Text style={styles.rechargeButtonText}>Add Credit</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.balanceAmount}>₹{walletData.balance.toLocaleString()}</Text>
+          <Text style={styles.balanceAmount}>
+            ₹{parseFloat(wallet?.balance || '0').toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+          </Text>
           <Text style={styles.balanceLabel}>Available Balance</Text>
-          <Text style={styles.balanceSubtext}>Last recharged: ₹{walletData.lastRecharge.toLocaleString()}</Text>
-        </View>
 
-        {/* Quick Recharge */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Recharge</Text>
-          <View style={styles.rechargeGrid}>
-            {quickRechargeAmounts.map((amount) => (
-              <TouchableOpacity key={amount} style={styles.rechargeOption}>
-                <IndianRupee size={16} color="#1E40AF" />
-                <Text style={styles.rechargeAmount}>{amount.toLocaleString()}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.customRechargeButton}>
-            <CreditCard size={20} color="#1E40AF" />
-            <Text style={styles.customRechargeText}>Enter Custom Amount</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Commission Summary */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Commission Summary</Text>
-          <View style={styles.summaryGrid}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>This Month</Text>
-              <Text style={styles.summaryAmount}>₹{walletData.totalCommissionPaid.toLocaleString()}</Text>
-              <Text style={styles.summarySubtext}>Commission Paid</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Total Credited</Text>
+              <Text style={styles.statValue}>
+                ₹{parseFloat(wallet?.total_credited || '0').toLocaleString('en-IN')}
+              </Text>
             </View>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Commission Rate</Text>
-              <Text style={styles.summaryAmount}>11%</Text>
-              <Text style={styles.summarySubtext}>A1 Taxi Standard</Text>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Total Debited</Text>
+              <Text style={styles.statValue}>
+                ₹{parseFloat(wallet?.total_debited || '0').toLocaleString('en-IN')}
+              </Text>
             </View>
           </View>
-          <View style={styles.autoPayCard}>
-            <Text style={styles.autoPayTitle}>Auto-Pay Commission</Text>
-            <Text style={styles.autoPayDesc}>Automatically deduct commission from wallet</Text>
-            <TouchableOpacity style={styles.enableAutoPayButton}>
-              <Text style={styles.enableAutoPayText}>Enable Auto-Pay</Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
-        {/* Transaction History */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Transactions</Text>
-            <TouchableOpacity>
-              <History size={20} color="#1E40AF" />
-            </TouchableOpacity>
-          </View>
-          
+          <Text style={styles.sectionTitle}>Transaction History</Text>
+          {transactions.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No transactions yet</Text>
+              <Text style={styles.emptySubtext}>Add your first credit to get started</Text>
+            </View>
+          )}
+
           {transactions.map((transaction) => (
             <View key={transaction.id} style={styles.transactionCard}>
               <View style={styles.transactionHeader}>
-                <View style={styles.transactionIcon}>
-                  {getTransactionIcon(transaction.type)}
+                <View
+                  style={[
+                    styles.transactionIcon,
+                    { backgroundColor: transaction.transaction_type === 'credit' ? '#D1FAE5' : '#FEE2E2' }
+                  ]}
+                >
+                  {transaction.transaction_type === 'credit' ? (
+                    <ArrowDownLeft size={20} color="#10B981" />
+                  ) : (
+                    <ArrowUpRight size={20} color="#EF4444" />
+                  )}
                 </View>
                 <View style={styles.transactionDetails}>
                   <Text style={styles.transactionDescription}>{transaction.description}</Text>
-                  <Text style={styles.transactionDate}>{transaction.date}</Text>
+                  <Text style={styles.transactionDate}>{formatDate(transaction.created_at)}</Text>
                 </View>
                 <View style={styles.transactionAmount}>
-                  <Text style={[
-                    styles.transactionAmountText,
-                    { color: transaction.type === 'credit' ? '#10B981' : '#EF4444' }
-                  ]}>
-                    {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
+                  <Text
+                    style={[
+                      styles.transactionAmountText,
+                      { color: transaction.transaction_type === 'credit' ? '#10B981' : '#EF4444' }
+                    ]}
+                  >
+                    {transaction.transaction_type === 'credit' ? '+' : '-'}₹
+                    {parseFloat(transaction.amount).toLocaleString('en-IN')}
                   </Text>
-                  <Text style={styles.transactionStatus}>Completed</Text>
                 </View>
               </View>
             </View>
           ))}
+        </View>
 
-          <TouchableOpacity style={styles.viewAllButton}>
-            <Text style={styles.viewAllText}>View All Transactions</Text>
-          </TouchableOpacity>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>About Wallet System</Text>
+          <Text style={styles.infoText}>
+            • Admin adds daily credits to your wallet{'\n'}
+            • Driver commissions are automatically deducted{'\n'}
+            • Track all transactions in real-time{'\n'}
+            • Maintain sufficient balance for smooth operations
+          </Text>
         </View>
       </ScrollView>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Credit</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <X size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Quick Select</Text>
+                <View style={styles.quickAmounts}>
+                  {quickAmounts.map((amount) => (
+                    <TouchableOpacity
+                      key={amount}
+                      style={[
+                        styles.quickAmountButton,
+                        creditAmount === amount.toString() && styles.quickAmountButtonSelected,
+                      ]}
+                      onPress={() => {
+                        setCreditAmount(amount.toString());
+                        setDescription(`Admin daily credit - ₹${amount}`);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.quickAmountText,
+                          creditAmount === amount.toString() && styles.quickAmountTextSelected,
+                        ]}
+                      >
+                        ₹{amount.toLocaleString()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Amount *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter amount"
+                  keyboardType="numeric"
+                  value={creditAmount}
+                  onChangeText={setCreditAmount}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Description *</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="e.g., Admin daily credit"
+                  multiline
+                  numberOfLines={3}
+                  value={description}
+                  onChangeText={setDescription}
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.submitButton]}
+                  onPress={handleAddCredit}
+                >
+                  <Text style={styles.submitButtonText}>Add Credit</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -148,12 +390,21 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#E0E7FF',
+    color: '#FEE2E2',
     marginTop: 4,
   },
   content: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
   },
   balanceCard: {
     backgroundColor: '#FFFFFF',
@@ -176,17 +427,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#DC2626',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 20,
   },
   rechargeButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
-    marginLeft: 4,
+    marginLeft: 6,
+    fontSize: 14,
   },
   balanceAmount: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: '700',
     color: '#DC2626',
     marginBottom: 8,
@@ -194,130 +446,53 @@ const styles = StyleSheet.create({
   balanceLabel: {
     fontSize: 16,
     color: '#6B7280',
+    marginBottom: 16,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  statItem: {
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6B7280',
     marginBottom: 4,
   },
-  balanceSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
+  statValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
   },
   section: {
     marginTop: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#111827',
-  },
-  rechargeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
-  },
-  rechargeOption: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E7FF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  rechargeAmount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#DC2626',
-    marginTop: 4,
-  },
-  customRechargeButton: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FECACA',
-    borderStyle: 'dashed',
-  },
-  customRechargeText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#DC2626',
-    marginLeft: 8,
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  summaryCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  summaryAmount: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  summarySubtext: {
-    fontSize: 10,
-    color: '#9CA3AF',
-  },
-  autoPayCard: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  autoPayTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#991B1B',
-    marginBottom: 4,
-  },
-  autoPayDesc: {
-    fontSize: 14,
-    color: '#991B1B',
     marginBottom: 12,
   },
-  enableAutoPayButton: {
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
   },
-  enableAutoPayText: {
-    color: '#FFFFFF',
+  emptyText: {
+    fontSize: 18,
     fontWeight: '600',
+    color: '#111827',
+  },
+  emptySubtext: {
     fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
   },
   transactionCard: {
     backgroundColor: '#FFFFFF',
@@ -335,10 +510,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   transactionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -348,9 +522,9 @@ const styles = StyleSheet.create({
   },
   transactionDescription: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#111827',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   transactionDate: {
     fontSize: 12,
@@ -361,25 +535,126 @@ const styles = StyleSheet.create({
   },
   transactionAmountText: {
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: '700',
   },
-  transactionStatus: {
-    fontSize: 10,
-    color: '#DC2626',
-    fontWeight: '500',
-  },
-  viewAllButton: {
-    backgroundColor: '#FEE2E2',
+  infoCard: {
+    backgroundColor: '#EFF6FF',
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center',
     marginTop: 8,
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
   },
-  viewAllText: {
+  infoTitle: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: '#1E40AF',
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#1E40AF',
+    lineHeight: 22,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#111827',
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  quickAmounts: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickAmountButton: {
+    flex: 1,
+    minWidth: '45%',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  quickAmountButtonSelected: {
+    borderColor: '#DC2626',
+    backgroundColor: '#FEE2E2',
+  },
+  quickAmountText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  quickAmountTextSelected: {
     color: '#DC2626',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F3F4F6',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  submitButton: {
+    backgroundColor: '#DC2626',
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
