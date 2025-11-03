@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import { Search, Plus, X, Trash2 } from 'lucide-react-native';
 import { supabase, Vehicle, Driver } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 export default function Fleet() {
+  const { vendor } = useAuth();
   const [vehicles, setVehicles] = useState<(Vehicle & { driver?: Driver })[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [vendorId, setVendorId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [formData, setFormData] = useState({
@@ -21,52 +22,18 @@ export default function Fleet() {
   });
 
   useEffect(() => {
-    initializeVendorAndLoadData();
-  }, []);
-
-  const initializeVendorAndLoadData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      let { data: vendor } = await supabase
-        .from('vendors')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!vendor) {
-        const { data: newVendor, error } = await supabase
-          .from('vendors')
-          .insert({
-            user_id: user.id,
-            name: user.email?.split('@')[0] || 'Vendor',
-            email: user.email || '',
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        vendor = newVendor;
-      }
-
-      if (vendor) {
-        setVendorId(vendor.id);
-        await loadVehicles(vendor.id);
-        await loadDrivers(vendor.id);
-      }
-    } catch (error) {
-      console.error('Error initializing:', error);
-    } finally {
+    if (vendor) {
+      loadVehicles();
+      loadDrivers();
+    } else {
       setLoading(false);
     }
-  };
+  }, [vendor]);
 
-  const loadVehicles = async (vId: string) => {
+
+  const loadVehicles = async () => {
+    if (!vendor) return;
+
     try {
       const { data, error } = await supabase
         .from('vehicles')
@@ -74,22 +41,26 @@ export default function Fleet() {
           *,
           driver:drivers(*)
         `)
-        .eq('vendor_id', vId)
+        .eq('vendor_id', vendor.vendor_id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       setVehicles(data || []);
     } catch (error) {
       console.error('Error loading vehicles:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadDrivers = async (vId: string) => {
+  const loadDrivers = async () => {
+    if (!vendor) return;
+
     try {
       const { data, error } = await supabase
         .from('drivers')
         .select('*')
-        .eq('vendor_id', vId)
+        .eq('vendor_id', vendor.vendor_id)
         .eq('status', 'active')
         .order('name');
 
@@ -101,7 +72,7 @@ export default function Fleet() {
   };
 
   const handleAddVehicle = async () => {
-    if (!vendorId) {
+    if (!vendor) {
       Alert.alert('Error', 'Please sign in first');
       return;
     }
@@ -115,7 +86,7 @@ export default function Fleet() {
       const { error } = await supabase
         .from('vehicles')
         .insert({
-          vendor_id: vendorId,
+          vendor_id: vendor.vendor_id,
           vehicle_number: formData.vehicle_number.toUpperCase(),
           vehicle_type: formData.vehicle_type,
           make: formData.make,
@@ -130,7 +101,7 @@ export default function Fleet() {
       Alert.alert('Success', 'Vehicle added successfully');
       setModalVisible(false);
       setFormData({ vehicle_number: '', vehicle_type: 'car', make: '', model: '', year: '', driver_id: '' });
-      await loadVehicles(vendorId);
+      await loadVehicles();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }
@@ -155,7 +126,7 @@ export default function Fleet() {
               if (error) throw error;
 
               Alert.alert('Success', 'Vehicle deleted successfully');
-              if (vendorId) await loadVehicles(vendorId);
+              await loadVehicles();
             } catch (error: any) {
               Alert.alert('Error', error.message);
             }
@@ -177,7 +148,7 @@ export default function Fleet() {
         .eq('id', vehicle.id);
 
       if (error) throw error;
-      if (vendorId) await loadVehicles(vendorId);
+      await loadVehicles();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }

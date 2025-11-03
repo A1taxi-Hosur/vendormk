@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import { Search, Plus, X, Phone, Mail, CreditCard } from 'lucide-react-native';
 import { supabase, Driver } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 export default function Drivers() {
+  const { vendor } = useAuth();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [vendorId, setVendorId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [formData, setFormData] = useState({
@@ -18,67 +19,34 @@ export default function Drivers() {
   });
 
   useEffect(() => {
-    initializeVendorAndLoadDrivers();
-  }, []);
-
-  const initializeVendorAndLoadDrivers = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      let { data: vendor } = await supabase
-        .from('vendors')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!vendor) {
-        const { data: newVendor, error } = await supabase
-          .from('vendors')
-          .insert({
-            user_id: user.id,
-            name: user.email?.split('@')[0] || 'Vendor',
-            email: user.email || '',
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        vendor = newVendor;
-      }
-
-      if (vendor) {
-        setVendorId(vendor.id);
-        await loadDrivers(vendor.id);
-      }
-    } catch (error) {
-      console.error('Error initializing:', error);
-    } finally {
+    if (vendor) {
+      loadDrivers();
+    } else {
       setLoading(false);
     }
-  };
+  }, [vendor]);
 
-  const loadDrivers = async (vId: string) => {
+  const loadDrivers = async () => {
+    if (!vendor) return;
+
     try {
       const { data, error } = await supabase
         .from('drivers')
         .select('*')
-        .eq('vendor_id', vId)
+        .eq('vendor_id', vendor.vendor_id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       setDrivers(data || []);
     } catch (error) {
       console.error('Error loading drivers:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleAddDriver = async () => {
-    if (!vendorId) {
+    if (!vendor) {
       Alert.alert('Error', 'Please sign in first');
       return;
     }
@@ -92,7 +60,7 @@ export default function Drivers() {
       const { error } = await supabase
         .from('drivers')
         .insert({
-          vendor_id: vendorId,
+          vendor_id: vendor.vendor_id,
           name: formData.name,
           email: formData.email || null,
           phone: formData.phone,
@@ -105,7 +73,7 @@ export default function Drivers() {
       Alert.alert('Success', 'Driver added successfully');
       setModalVisible(false);
       setFormData({ name: '', email: '', phone: '', license_number: '' });
-      await loadDrivers(vendorId);
+      await loadDrivers();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }
@@ -130,7 +98,7 @@ export default function Drivers() {
               if (error) throw error;
 
               Alert.alert('Success', 'Driver deleted successfully');
-              if (vendorId) await loadDrivers(vendorId);
+              await loadDrivers();
             } catch (error: any) {
               Alert.alert('Error', error.message);
             }
@@ -149,7 +117,7 @@ export default function Drivers() {
         .eq('id', driver.id);
 
       if (error) throw error;
-      if (vendorId) await loadDrivers(vendorId);
+      await loadDrivers();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }

@@ -7,10 +7,9 @@ import { useAuth } from '@/lib/auth-context';
 
 export default function Dashboard() {
   const router = useRouter();
-  const { signOut, user } = useAuth();
+  const { signOut, vendor } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [, setVendorId] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [wallet, setWallet] = useState<WalletType | null>(null);
@@ -38,57 +37,21 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    initializeAndLoadData();
-  }, []);
-
-  const initializeAndLoadData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      let { data: vendor } = await supabase
-        .from('vendors')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!vendor) {
-        const { data: newVendor, error } = await supabase
-          .from('vendors')
-          .insert({
-            user_id: user.id,
-            name: user.email?.split('@')[0] || 'Vendor',
-            email: user.email || '',
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        vendor = newVendor;
-      }
-
-      if (vendor) {
-        setVendorId(vendor.id);
-        await loadAllData(vendor.id);
-      }
-    } catch (error) {
-      console.error('Error initializing:', error);
-    } finally {
+    if (vendor) {
+      loadAllData();
+    } else {
       setLoading(false);
-      setRefreshing(false);
     }
-  };
+  }, [vendor]);
 
-  const loadAllData = async (vId: string) => {
+  const loadAllData = async () => {
+    if (!vendor) return;
+
     try {
       const [driversData, vehiclesData, walletData] = await Promise.all([
-        supabase.from('drivers').select('*').eq('vendor_id', vId),
-        supabase.from('vehicles').select('*').eq('vendor_id', vId),
-        supabase.from('wallets').select('*').eq('vendor_id', vId).maybeSingle(),
+        supabase.from('drivers').select('*').eq('vendor_id', vendor.vendor_id),
+        supabase.from('vehicles').select('*').eq('vendor_id', vendor.vendor_id),
+        supabase.from('wallets').select('*').eq('vendor_id', vendor.vendor_id).maybeSingle(),
       ]);
 
       if (driversData.data) setDrivers(driversData.data);
@@ -96,12 +59,15 @@ export default function Dashboard() {
       if (walletData.data) setWallet(walletData.data);
     } catch (error) {
       console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await initializeAndLoadData();
+    await loadAllData();
   };
 
   const activeDrivers = drivers.filter(d => d.status === 'active').length;
@@ -127,7 +93,7 @@ export default function Dashboard() {
         <View>
           <Text style={styles.headerTitle}>Vendor Dashboard</Text>
           <Text style={styles.headerSubtitle}>Fleet Management System</Text>
-          {user?.email && <Text style={styles.headerEmail}>{user.email}</Text>}
+          {vendor?.name && <Text style={styles.headerEmail}>{vendor.name}</Text>}
         </View>
         <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
           <LogOut size={20} color="#FFFFFF" />
