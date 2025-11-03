@@ -10,6 +10,7 @@ type VendorSession = {
 
 type AuthContextType = {
   vendor: VendorSession | null;
+  user: VendorSession | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<void>;
   signUp: (username: string, password: string, name: string, email: string, phone?: string) => Promise<void>;
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ vendor, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ vendor, user: vendor, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
