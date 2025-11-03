@@ -1,9 +1,8 @@
+import 'react-native-gesture-handler';
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import * as SplashScreen from 'expo-splash-screen';
-import 'react-native-gesture-handler';
+import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -15,12 +14,9 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="+not-found" />
+    </Stack>
   );
 }
