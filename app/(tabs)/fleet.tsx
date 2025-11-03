@@ -18,6 +18,7 @@ export default function Fleet() {
     make: '',
     model: '',
     year: '',
+    color: '',
     driver_id: '',
   });
 
@@ -39,7 +40,7 @@ export default function Fleet() {
         .from('vehicles')
         .select(`
           *,
-          driver:drivers(*)
+          driver:drivers!vehicles_driver_id_fkey(*)
         `)
         .eq('vendor_id', vendor.vendor_id)
         .order('created_at', { ascending: false });
@@ -77,7 +78,7 @@ export default function Fleet() {
       return;
     }
 
-    if (!formData.vehicle_number || !formData.make || !formData.model) {
+    if (!formData.vehicle_number || !formData.make || !formData.model || !formData.color) {
       Alert.alert('Error', 'Please fill all required fields');
       return;
     }
@@ -92,6 +93,7 @@ export default function Fleet() {
           make: formData.make,
           model: formData.model,
           year: formData.year ? parseInt(formData.year) : null,
+          color: formData.color,
           driver_id: formData.driver_id || null,
           status: 'active',
         });
@@ -100,7 +102,7 @@ export default function Fleet() {
 
       Alert.alert('Success', 'Vehicle added successfully');
       setModalVisible(false);
-      setFormData({ vehicle_number: '', vehicle_type: 'car', make: '', model: '', year: '', driver_id: '' });
+      setFormData({ vehicle_number: '', vehicle_type: 'car', make: '', model: '', year: '', color: '', driver_id: '' });
       await loadVehicles();
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -354,6 +356,16 @@ export default function Fleet() {
                   maxLength={4}
                   value={formData.year}
                   onChangeText={(text) => setFormData({ ...formData, year: text })}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Color *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., White, Black"
+                  value={formData.color}
+                  onChangeText={(text) => setFormData({ ...formData, color: text })}
                 />
               </View>
 
