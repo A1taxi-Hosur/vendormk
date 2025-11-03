@@ -1,15 +1,22 @@
 import 'react-native-gesture-handler';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
+import { Platform } from 'react-native';
+
+declare global {
+  interface Window {
+    frameworkReady?: () => void;
+  }
+}
 
 export default function RootLayout() {
-  useFrameworkReady();
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      setTimeout(() => {
+        window.frameworkReady?.();
+      }, 0);
+    }
+  }, []);
 
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="+not-found" />
-    </Stack>
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
