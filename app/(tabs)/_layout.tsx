@@ -16,52 +16,7 @@ export default function TabLayout() {
           paddingBottom: 5,
           height: 60,
         },
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ size, color }) => (
-            <Gauge size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="fleet"
-        options={{
-          title: 'Fleet',
-          tabBarIcon: ({ size, color }) => (
-            <Car size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="earnings"
-        options={{
-          title: 'Earnings',
-          tabBarIcon: ({ size, color }) => (
-            <TrendingUp size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="drivers"
-        options={{
-          title: 'Drivers',
-          tabBarIcon: ({ size, color }) => (
-            <Users size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="wallet"
-        options={{
-          title: 'Wallet',
-          tabBarIcon: ({ size, color }) => (
-            <Wallet size={size} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+      }}
+    />
   );
 }
