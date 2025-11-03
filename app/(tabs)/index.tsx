@@ -1,17 +1,41 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
-import { Car, Users, Wallet, TrendingUp } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { Car, Users, Wallet, TrendingUp, LogOut } from 'lucide-react-native';
 import { supabase, Driver, Vehicle, Wallet as WalletType } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/lib/auth-context';
 
 export default function Dashboard() {
   const router = useRouter();
+  const { signOut, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [, setVendorId] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [wallet, setWallet] = useState<WalletType | null>(null);
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+              router.replace('/auth');
+            } catch (error: any) {
+              Alert.alert('Error', error.message);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     initializeAndLoadData();
@@ -100,8 +124,14 @@ export default function Dashboard() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Vendor Dashboard</Text>
-        <Text style={styles.headerSubtitle}>Fleet Management System</Text>
+        <View>
+          <Text style={styles.headerTitle}>Vendor Dashboard</Text>
+          <Text style={styles.headerSubtitle}>Fleet Management System</Text>
+          {user?.email && <Text style={styles.headerEmail}>{user.email}</Text>}
+        </View>
+        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+          <LogOut size={20} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -278,6 +308,9 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   headerTitle: {
     fontSize: 24,
@@ -288,6 +321,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FEE2E2',
     marginTop: 4,
+  },
+  headerEmail: {
+    fontSize: 12,
+    color: '#FEE2E2',
+    marginTop: 2,
+    opacity: 0.9,
+  },
+  signOutButton: {
+    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
   },
   content: {
     flex: 1,
