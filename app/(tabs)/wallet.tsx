@@ -2,83 +2,54 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X } from 'lucide-react-native';
 import { supabase, Wallet as WalletType, WalletTransaction } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 export default function WalletScreen() {
+  const { vendor } = useAuth();
   const [wallet, setWallet] = useState<WalletType | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [vendorId, setVendorId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [creditAmount, setCreditAmount] = useState('');
   const [description, setDescription] = useState('');
 
   useEffect(() => {
-    initializeAndLoadWallet();
-  }, []);
-
-  const initializeAndLoadWallet = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      let { data: vendor } = await supabase
-        .from('vendors')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!vendor) {
-        const { data: newVendor, error } = await supabase
-          .from('vendors')
-          .insert({
-            user_id: user.id,
-            name: user.email?.split('@')[0] || 'Vendor',
-            email: user.email || '',
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        vendor = newVendor;
-      }
-
-      if (vendor) {
-        setVendorId(vendor.id);
-        await loadWallet(vendor.id);
-        await loadTransactions(vendor.id);
-      }
-    } catch (error) {
-      console.error('Error initializing:', error);
-    } finally {
+    if (vendor) {
+      loadWallet();
+      loadTransactions();
+    } else {
       setLoading(false);
     }
-  };
+  }, [vendor]);
 
-  const loadWallet = async (vId: string) => {
+
+  const loadWallet = async () => {
+    if (!vendor) return;
+
     try {
       const { data, error } = await supabase
         .from('wallets')
         .select('*')
-        .eq('vendor_id', vId)
+        .eq('vendor_id', vendor.vendor_id)
         .maybeSingle();
 
       if (error) throw error;
       setWallet(data);
     } catch (error) {
       console.error('Error loading wallet:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadTransactions = async (vId: string) => {
+  const loadTransactions = async () => {
+    if (!vendor) return;
+
     try {
       const { data, error } = await supabase
         .from('wallet_transactions')
         .select('*')
-        .eq('vendor_id', vId)
+        .eq('vendor_id', vendor.vendor_id)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -90,7 +61,7 @@ export default function WalletScreen() {
   };
 
   const handleAddCredit = async () => {
-    if (!vendorId || !wallet) {
+    if (!vendor || !wallet) {
       Alert.alert('Error', 'Wallet not initialized');
       return;
     }
@@ -110,7 +81,7 @@ export default function WalletScreen() {
         .from('wallet_transactions')
         .insert({
           wallet_id: wallet.id,
-          vendor_id: vendorId,
+          vendor_id: vendor.vendor_id,
           transaction_type: 'credit',
           amount: parseFloat(creditAmount),
           description: description,
@@ -123,8 +94,8 @@ export default function WalletScreen() {
       setModalVisible(false);
       setCreditAmount('');
       setDescription('');
-      await loadWallet(vendorId);
-      await loadTransactions(vendorId);
+      await loadWallet();
+      await loadTransactions();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }
