@@ -1,55 +1,87 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 
+type VendorSession = {
+  vendor_id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+};
+
 type AuthContextType = {
-  session: Session | null;
-  user: User | null;
+  vendor: VendorSession | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (username: string, password: string) => Promise<void>;
+  signUp: (username: string, password: string, name: string, email: string, phone?: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const VENDOR_STORAGE_KEY = 'vendor_session';
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [vendor, setVendor] = useState<VendorSession | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    loadVendorSession();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+  const loadVendorSession = async () => {
+    try {
+      const storedVendor = localStorage.getItem(VENDOR_STORAGE_KEY);
+      if (storedVendor) {
+        const vendorData = JSON.parse(storedVendor);
+        setVendor(vendorData);
+      }
+    } catch (error) {
+      console.error('Error loading vendor session:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
+  const signIn = async (username: string, password: string) => {
+    const { data, error } = await supabase.rpc('verify_vendor_login', {
+      p_username: username,
+      p_password: password,
+    });
+
+    if (error) throw new Error('Invalid username or password');
+    if (!data || data.length === 0) throw new Error('Invalid username or password');
+
+    const vendorData = data[0];
+    setVendor(vendorData);
+    localStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendorData));
+  };
+
+  const signUp = async (username: string, password: string, name: string, email: string, phone?: string) => {
+    const { data, error } = await supabase.rpc('create_vendor', {
+      p_username: username,
+      p_password: password,
+      p_company_name: name,
+      p_license_number: 'TEMP',
+      p_address: 'N/A',
+    });
+
+    if (error) {
+      if (error.message.includes('duplicate key')) {
+        throw new Error('Username already exists');
+      }
+      throw error;
+    }
+
+    if (!data) throw new Error('Failed to create account');
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    setVendor(null);
+    localStorage.removeItem(VENDOR_STORAGE_KEY);
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ vendor, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
