@@ -34,11 +34,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const storedVendor = localStorage.getItem(VENDOR_STORAGE_KEY);
       if (storedVendor) {
         const vendorData = JSON.parse(storedVendor);
-        await supabase.rpc('set_vendor_context', { vendor_id: vendorData.vendor_id });
         setVendor(vendorData);
       }
     } catch (error) {
       console.error('Error loading vendor session:', error);
+      localStorage.removeItem(VENDOR_STORAGE_KEY);
     } finally {
       setLoading(false);
     }
@@ -54,8 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!data || data.length === 0) throw new Error('Invalid username or password');
 
     const vendorData = data[0];
-
-    await supabase.rpc('set_vendor_context', { vendor_id: vendorData.vendor_id });
 
     setVendor(vendorData);
     localStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendorData));

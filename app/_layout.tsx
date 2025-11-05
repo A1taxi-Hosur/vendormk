@@ -25,7 +25,7 @@ function RootLayoutNav() {
     } else if (user && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [user, loading, segments]);
+  }, [user, loading, segments, router]);
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }
