@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
-import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X } from 'lucide-react-native';
+import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react-native';
 import { supabase, Wallet as WalletType, WalletTransaction, Commission } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+
+const ADMIN_DAILY_ALLOCATION = 10000;
 
 export default function WalletScreen() {
   const { vendor } = useAuth();
@@ -13,6 +15,9 @@ export default function WalletScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [creditAmount, setCreditAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [calculatedBalance, setCalculatedBalance] = useState(0);
+  const [totalDeducted, setTotalDeducted] = useState(0);
 
   useEffect(() => {
     if (vendor) {
@@ -24,6 +29,38 @@ export default function WalletScreen() {
     }
   }, [vendor]);
 
+  useEffect(() => {
+    if (vendor) {
+      calculateBalanceForDate(selectedDate);
+    }
+  }, [selectedDate, vendor]);
+
+  const calculateBalanceForDate = async (date: Date) => {
+    if (!vendor) return;
+
+    const dateString = date.toISOString().split('T')[0];
+
+    try {
+      const { data, error } = await supabase
+        .from('commissions')
+        .select('driver_allowance')
+        .eq('vendor_id', vendor.vendor_id)
+        .eq('commission_date', dateString)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const driverAllowance = data?.driver_allowance ? parseFloat(data.driver_allowance) : 0;
+      const balance = ADMIN_DAILY_ALLOCATION - driverAllowance;
+
+      setCalculatedBalance(balance);
+      setTotalDeducted(driverAllowance);
+    } catch (error) {
+      console.error('Error calculating balance:', error);
+      setCalculatedBalance(ADMIN_DAILY_ALLOCATION);
+      setTotalDeducted(0);
+    }
+  };
 
   const loadWallet = async () => {
     if (!vendor) return;
@@ -121,6 +158,107 @@ export default function WalletScreen() {
     }
   };
 
+  const changeMonth = (increment: number) => {
+    const newDate = new Date(selectedDate);
+    newDate.setMonth(newDate.getMonth() + increment);
+    setSelectedDate(newDate);
+  };
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+
+    return { daysInMonth, startingDayOfWeek };
+  };
+
+  const formatMonthYear = (date: Date) => {
+    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  };
+
+  const isToday = (day: number) => {
+    const today = new Date();
+    return (
+      day === today.getDate() &&
+      selectedDate.getMonth() === today.getMonth() &&
+      selectedDate.getFullYear() === today.getFullYear()
+    );
+  };
+
+  const isSelectedDay = (day: number) => {
+    const checkDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
+    return (
+      day === selectedDate.getDate() &&
+      checkDate.getMonth() === selectedDate.getMonth()
+    );
+  };
+
+  const selectDate = (day: number) => {
+    const newDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
+    setSelectedDate(newDate);
+  };
+
+  const renderCompactCalendar = () => {
+    const { daysInMonth, startingDayOfWeek } = getDaysInMonth(selectedDate);
+    const days = [];
+    const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(<View key={`empty-${i}`} style={styles.compactCalendarDay} />);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const today = isToday(day);
+      const selected = isSelectedDay(day);
+      days.push(
+        <TouchableOpacity
+          key={day}
+          style={[
+            styles.compactCalendarDay,
+            today && styles.compactCalendarDayToday,
+            selected && styles.compactCalendarDaySelected,
+          ]}
+          onPress={() => selectDate(day)}
+        >
+          <Text
+            style={[
+              styles.compactCalendarDayText,
+              (today || selected) && styles.compactCalendarDayTextActive,
+            ]}
+          >
+            {day}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <View style={styles.compactCalendarCard}>
+        <View style={styles.compactCalendarHeader}>
+          <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.compactCalendarNavButton}>
+            <ChevronLeft size={16} color="#DC2626" />
+          </TouchableOpacity>
+          <Text style={styles.compactCalendarMonth}>{formatMonthYear(selectedDate)}</Text>
+          <TouchableOpacity onPress={() => changeMonth(1)} style={styles.compactCalendarNavButton}>
+            <ChevronRight size={16} color="#DC2626" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.compactCalendarWeekDays}>
+          {weekDays.map((day, idx) => (
+            <View key={idx} style={styles.compactCalendarWeekDay}>
+              <Text style={styles.compactCalendarWeekDayText}>{day}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.compactCalendarDaysGrid}>{days}</View>
+      </View>
+    );
+  };
 
   const quickAmounts = [1000, 5000, 10000, 25000];
 
@@ -152,39 +290,49 @@ export default function WalletScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Wallet</Text>
-        <Text style={styles.headerSubtitle}>Manage your balance</Text>
+        <Text style={styles.headerSubtitle}>Daily balance tracker</Text>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.balanceCard}>
-          <View style={styles.balanceHeader}>
-            <Wallet size={32} color="#DC2626" />
-            <TouchableOpacity
-              style={styles.rechargeButton}
-              onPress={() => setModalVisible(true)}
-            >
-              <Plus size={16} color="#FFFFFF" />
-              <Text style={styles.rechargeButtonText}>Add Credit</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.balanceAmount}>
-            ₹{parseFloat(wallet?.balance || '0').toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-          </Text>
-          <Text style={styles.balanceLabel}>Available Balance</Text>
+        <View style={styles.topRow}>
+          <View style={styles.balanceCard}>
+            <View style={styles.balanceHeader}>
+              <Wallet size={24} color="#DC2626" />
+              <TouchableOpacity
+                style={styles.rechargeButton}
+                onPress={() => setModalVisible(true)}
+              >
+                <Plus size={14} color="#FFFFFF" />
+                <Text style={styles.rechargeButtonText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.balanceAmount}>
+              ₹{calculatedBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </Text>
+            <Text style={styles.balanceLabel}>Balance on {selectedDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</Text>
 
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Total Credited</Text>
-              <Text style={styles.statValue}>
-                ₹{parseFloat(wallet?.total_credited || '0').toLocaleString('en-IN')}
-              </Text>
+            <View style={styles.miniStatsRow}>
+              <View style={styles.miniStatItem}>
+                <Text style={styles.miniStatLabel}>Allocated</Text>
+                <Text style={styles.miniStatValue}>₹{ADMIN_DAILY_ALLOCATION.toLocaleString('en-IN')}</Text>
+              </View>
+              <View style={styles.miniStatItem}>
+                <Text style={styles.miniStatLabel}>Deducted</Text>
+                <Text style={[styles.miniStatValue, { color: '#EF4444' }]}>₹{totalDeducted.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
+              </View>
             </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Total Debited</Text>
-              <Text style={styles.statValue}>
-                ₹{parseFloat(wallet?.total_debited || '0').toLocaleString('en-IN')}
-              </Text>
-            </View>
+          </View>
+
+          {renderCompactCalendar()}
+        </View>
+
+        <View style={styles.infoCard}>
+          <Calendar size={16} color="#1E40AF" />
+          <View style={styles.infoTextContainer}>
+            <Text style={styles.infoTitle}>Wallet Calculation</Text>
+            <Text style={styles.infoText}>
+              Balance = Admin Daily Allocation (₹{ADMIN_DAILY_ALLOCATION.toLocaleString('en-IN')}) - Driver Allowances for selected date
+            </Text>
           </View>
         </View>
 
@@ -279,15 +427,7 @@ export default function WalletScreen() {
           ))}
         </View>
 
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>About Wallet System</Text>
-          <Text style={styles.infoText}>
-            • Admin adds daily credits to your wallet{'\n'}
-            • Driver commissions are automatically deducted{'\n'}
-            • Track all transactions in real-time{'\n'}
-            • Maintain sufficient balance for smooth operations
-          </Text>
-        </View>
+        <View style={{ height: 20 }} />
       </ScrollView>
 
       <Modal
@@ -413,67 +553,163 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
   },
-  balanceCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+  topRow: {
+    flexDirection: 'row',
     marginTop: 16,
+    gap: 12,
+  },
+  balanceCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 2,
   },
   balanceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   rechargeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#DC2626',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   rechargeButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
-    marginLeft: 6,
-    fontSize: 14,
+    marginLeft: 4,
+    fontSize: 12,
   },
   balanceAmount: {
-    fontSize: 40,
+    fontSize: 28,
     fontWeight: '700',
     color: '#DC2626',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   balanceLabel: {
-    fontSize: 16,
+    fontSize: 12,
     color: '#6B7280',
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  statsRow: {
+  miniStatsRow: {
     flexDirection: 'row',
-    gap: 16,
-    paddingTop: 16,
+    gap: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },
-  statItem: {
+  miniStatItem: {
     flex: 1,
   },
-  statLabel: {
-    fontSize: 12,
+  miniStatLabel: {
+    fontSize: 10,
     color: '#6B7280',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  statValue: {
-    fontSize: 16,
+  miniStatValue: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#111827',
+  },
+  compactCalendarCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  compactCalendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  compactCalendarNavButton: {
+    padding: 4,
+  },
+  compactCalendarMonth: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  compactCalendarWeekDays: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  compactCalendarWeekDay: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  compactCalendarWeekDayText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  compactCalendarDaysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  compactCalendarDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 2,
+  },
+  compactCalendarDayToday: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 4,
+  },
+  compactCalendarDaySelected: {
+    backgroundColor: '#DC2626',
+    borderRadius: 4,
+  },
+  compactCalendarDayText: {
+    fontSize: 10,
+    color: '#111827',
+  },
+  compactCalendarDayTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  infoTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1E40AF',
+    marginBottom: 4,
+  },
+  infoText: {
+    fontSize: 11,
+    color: '#1E40AF',
+    lineHeight: 16,
   },
   section: {
     marginTop: 24,
@@ -543,26 +779,6 @@ const styles = StyleSheet.create({
   transactionAmountText: {
     fontSize: 16,
     fontWeight: '700',
-  },
-  infoCard: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 8,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E40AF',
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#1E40AF',
-    lineHeight: 22,
   },
   modalContainer: {
     flex: 1,
