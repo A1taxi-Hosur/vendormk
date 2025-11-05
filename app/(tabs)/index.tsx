@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, Platform } from 'react-native';
 import { Car, Users, Wallet, TrendingUp, LogOut } from 'lucide-react-native';
 import { supabase, Driver, Vehicle, Wallet as WalletType } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
@@ -15,24 +15,39 @@ export default function Dashboard() {
   const [wallet, setWallet] = useState<WalletType | null>(null);
 
   const handleSignOut = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-            } catch (error: any) {
-              Alert.alert('Error', error.message);
-            }
+    console.log('Logout button clicked');
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to sign out?');
+      if (confirmed) {
+        try {
+          console.log('Calling signOut...');
+          await signOut();
+          console.log('SignOut completed');
+        } catch (error: any) {
+          console.error('SignOut error:', error);
+          window.alert('Error: ' + error.message);
+        }
+      }
+    } else {
+      Alert.alert(
+        'Sign Out',
+        'Are you sure you want to sign out?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign Out',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await signOut();
+              } catch (error: any) {
+                Alert.alert('Error', error.message);
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   useEffect(() => {
@@ -94,7 +109,12 @@ export default function Dashboard() {
           <Text style={styles.headerSubtitle}>Fleet Management System</Text>
           {vendor?.name && <Text style={styles.headerEmail}>{vendor.name}</Text>}
         </View>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+        <TouchableOpacity
+          onPress={handleSignOut}
+          style={styles.signOutButton}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <LogOut size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
@@ -297,6 +317,8 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 8,
+    zIndex: 10,
+    elevation: 5,
   },
   content: {
     flex: 1,
