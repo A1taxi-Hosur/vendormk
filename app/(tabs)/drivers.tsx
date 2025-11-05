@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native';
-import { Search, Phone, Mail, CreditCard, Car } from 'lucide-react-native';
-import { supabase, ParsedDriver } from '@/lib/supabase';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { Search, Phone, CreditCard, Car, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { supabase, ParsedDriver, Commission } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
 export default function Drivers() {
@@ -9,6 +9,9 @@ export default function Drivers() {
   const [drivers, setDrivers] = useState<ParsedDriver[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [driverAllowances, setDriverAllowances] = useState<{ [key: string]: number }>({});
+  const [totalAllowance, setTotalAllowance] = useState(0);
 
   useEffect(() => {
     if (vendor) {
@@ -17,6 +20,12 @@ export default function Drivers() {
       setLoading(false);
     }
   }, [vendor]);
+
+  useEffect(() => {
+    if (vendor && drivers.length > 0) {
+      loadDriverAllowancesForDate(selectedDate);
+    }
+  }, [selectedDate, drivers, vendor]);
 
   const parseDriverDetails = (driverDetailsText: string): ParsedDriver[] => {
     if (!driverDetailsText || driverDetailsText.trim() === '' || driverDetailsText === 'EMPTY') {
@@ -74,12 +83,156 @@ export default function Drivers() {
     }
   };
 
+  const loadDriverAllowancesForDate = async (date: Date) => {
+    if (!vendor) return;
+
+    const dateString = date.toISOString().split('T')[0];
+
+    try {
+      const { data, error } = await supabase
+        .from('commissions')
+        .select('driver_allowance')
+        .eq('vendor_id', vendor.vendor_id)
+        .eq('commission_date', dateString)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const total = data?.driver_allowance ? parseFloat(data.driver_allowance) : 0;
+      setTotalAllowance(total);
+
+      if (total > 0 && drivers.length > 0) {
+        const perDriverAllowance = total / drivers.length;
+        const allowances: { [key: string]: number } = {};
+        drivers.forEach(driver => {
+          allowances[driver.id] = perDriverAllowance;
+        });
+        setDriverAllowances(allowances);
+      } else {
+        setDriverAllowances({});
+      }
+    } catch (error) {
+      console.error('Error loading driver allowances:', error);
+      setDriverAllowances({});
+      setTotalAllowance(0);
+    }
+  };
+
   const filteredDrivers = drivers.filter(driver =>
     driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     driver.phone.includes(searchQuery) ||
     driver.license.toLowerCase().includes(searchQuery.toLowerCase()) ||
     driver.vehicle.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const changeMonth = (increment: number) => {
+    const newDate = new Date(selectedDate);
+    newDate.setMonth(newDate.getMonth() + increment);
+    setSelectedDate(newDate);
+  };
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+
+    return { daysInMonth, startingDayOfWeek };
+  };
+
+  const formatMonthYear = (date: Date) => {
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const isToday = (day: number) => {
+    const today = new Date();
+    return (
+      day === today.getDate() &&
+      selectedDate.getMonth() === today.getMonth() &&
+      selectedDate.getFullYear() === today.getFullYear()
+    );
+  };
+
+  const isSelectedDay = (day: number) => {
+    const checkDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
+    return (
+      day === selectedDate.getDate() &&
+      checkDate.getMonth() === selectedDate.getMonth()
+    );
+  };
+
+  const selectDate = (day: number) => {
+    const newDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
+    setSelectedDate(newDate);
+  };
+
+  const renderCalendar = () => {
+    const { daysInMonth, startingDayOfWeek } = getDaysInMonth(selectedDate);
+    const days = [];
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(<View key={`empty-${i}`} style={styles.calendarDay} />);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const today = isToday(day);
+      const selected = isSelectedDay(day);
+      days.push(
+        <TouchableOpacity
+          key={day}
+          style={[
+            styles.calendarDay,
+            today && styles.calendarDayToday,
+            selected && styles.calendarDaySelected,
+          ]}
+          onPress={() => selectDate(day)}
+        >
+          <Text
+            style={[
+              styles.calendarDayText,
+              (today || selected) && styles.calendarDayTextActive,
+            ]}
+          >
+            {day}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <View style={styles.calendarCard}>
+        <View style={styles.calendarHeader}>
+          <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.calendarNavButton}>
+            <ChevronLeft size={20} color="#DC2626" />
+          </TouchableOpacity>
+          <Text style={styles.calendarMonth}>{formatMonthYear(selectedDate)}</Text>
+          <TouchableOpacity onPress={() => changeMonth(1)} style={styles.calendarNavButton}>
+            <ChevronRight size={20} color="#DC2626" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.calendarWeekDays}>
+          {weekDays.map(day => (
+            <View key={day} style={styles.calendarWeekDay}>
+              <Text style={styles.calendarWeekDayText}>{day}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.calendarDaysGrid}>{days}</View>
+
+        {totalAllowance > 0 && (
+          <View style={styles.calendarFooter}>
+            <Text style={styles.calendarFooterLabel}>Total Allowance for {selectedDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</Text>
+            <Text style={styles.calendarFooterAmount}>₹{totalAllowance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -98,32 +251,38 @@ export default function Drivers() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Driver Management</Text>
-        <Text style={styles.headerSubtitle}>View your fleet drivers</Text>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Search size={20} color="#6B7280" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search drivers"
-          placeholderTextColor="#9CA3AF"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      <View style={styles.statsRow}>
-        <View style={[styles.miniCard, { backgroundColor: '#DC2626' }]}>
-          <Text style={styles.miniCardNumber}>{drivers.length}</Text>
-          <Text style={styles.miniCardLabel}>Total Drivers</Text>
-        </View>
-        <View style={[styles.miniCard, { backgroundColor: '#10B981' }]}>
-          <Text style={styles.miniCardNumber}>{filteredDrivers.length}</Text>
-          <Text style={styles.miniCardLabel}>Showing</Text>
-        </View>
+        <Text style={styles.headerSubtitle}>View drivers and daily allowances</Text>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {renderCalendar()}
+
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#6B7280" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search drivers"
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={[styles.miniCard, { backgroundColor: '#DC2626' }]}>
+            <Text style={styles.miniCardNumber}>{drivers.length}</Text>
+            <Text style={styles.miniCardLabel}>Total Drivers</Text>
+          </View>
+          <View style={[styles.miniCard, { backgroundColor: '#10B981' }]}>
+            <Text style={styles.miniCardNumber}>{filteredDrivers.length}</Text>
+            <Text style={styles.miniCardLabel}>Showing</Text>
+          </View>
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Drivers for {selectedDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Text>
+        </View>
+
         {filteredDrivers.map((driver) => (
           <View key={driver.id} style={styles.driverCard}>
             <View style={styles.driverHeader}>
@@ -145,8 +304,20 @@ export default function Drivers() {
                   </Text>
                 </View>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: '#10B981' }]}>
-                <Text style={styles.statusText}>active</Text>
+              <View style={styles.allowanceContainer}>
+                {driverAllowances[driver.id] !== undefined && driverAllowances[driver.id] > 0 ? (
+                  <>
+                    <Text style={styles.allowanceAmount}>
+                      ₹{driverAllowances[driver.id].toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    </Text>
+                    <Text style={styles.allowanceLabel}>Allowance</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.noAllowanceText}>₹0.00</Text>
+                    <Text style={styles.allowanceLabel}>No Allowance</Text>
+                  </>
+                )}
               </View>
             </View>
           </View>
@@ -158,6 +329,8 @@ export default function Drivers() {
             <Text style={styles.emptySubtext}>Contact support to add drivers</Text>
           </View>
         )}
+
+        <View style={{ height: 20 }} />
       </ScrollView>
     </View>
   );
@@ -184,11 +357,108 @@ const styles = StyleSheet.create({
     color: '#FEE2E2',
     marginTop: 4,
   },
+  content: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  calendarCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    margin: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  calendarNavButton: {
+    padding: 8,
+  },
+  calendarMonth: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  calendarWeekDays: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  calendarWeekDay: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  calendarWeekDayText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  calendarDaysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+  },
+  calendarDayToday: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+  },
+  calendarDaySelected: {
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+  },
+  calendarDayText: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  calendarDayTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  calendarFooter: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  calendarFooterLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  calendarFooterAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    margin: 16,
+    marginHorizontal: 16,
+    marginTop: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
@@ -208,7 +478,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 8,
-    marginBottom: 16,
+    marginTop: 16,
   },
   miniCard: {
     flex: 1,
@@ -226,23 +496,21 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     opacity: 0.9,
   },
-  content: {
-    flex: 1,
+  sectionHeader: {
     paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
+  sectionTitle: {
     fontSize: 16,
-    color: '#6B7280',
+    fontWeight: '600',
+    color: '#111827',
   },
   driverCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
+    marginHorizontal: 16,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -274,21 +542,31 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     flex: 1,
   },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    height: 32,
+  allowanceContainer: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingLeft: 12,
   },
-  statusText: {
-    fontSize: 12,
+  allowanceAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#10B981',
+    marginBottom: 2,
+  },
+  allowanceLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  noAllowanceText: {
+    fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
-    textTransform: 'capitalize',
+    color: '#9CA3AF',
+    marginBottom: 2,
   },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 48,
+    paddingHorizontal: 16,
   },
   emptyText: {
     fontSize: 18,
