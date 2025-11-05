@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
-import { Search, Plus, X, Phone, Mail, CreditCard } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native';
+import { Search, Phone, Mail, CreditCard } from 'lucide-react-native';
 import { supabase, Driver } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -8,15 +8,7 @@ export default function Drivers() {
   const { vendor } = useAuth();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    license_number: '',
-  });
 
   useEffect(() => {
     if (vendor) {
@@ -45,83 +37,7 @@ export default function Drivers() {
     }
   };
 
-  const handleAddDriver = async () => {
-    if (!vendor) {
-      Alert.alert('Error', 'Please sign in first');
-      return;
-    }
 
-    if (!formData.name || !formData.phone || !formData.license_number) {
-      Alert.alert('Error', 'Please fill all required fields');
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('drivers')
-        .insert({
-          vendor_id: vendor.vendor_id,
-          name: formData.name,
-          email: formData.email || null,
-          phone: formData.phone,
-          license_number: formData.license_number,
-          status: 'active',
-        });
-
-      if (error) throw error;
-
-      Alert.alert('Success', 'Driver added successfully');
-      setModalVisible(false);
-      setFormData({ name: '', email: '', phone: '', license_number: '' });
-      await loadDrivers();
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    }
-  };
-
-  const handleDeleteDriver = async (driverId: string) => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this driver?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('drivers')
-                .delete()
-                .eq('id', driverId);
-
-              if (error) throw error;
-
-              Alert.alert('Success', 'Driver deleted successfully');
-              await loadDrivers();
-            } catch (error: any) {
-              Alert.alert('Error', error.message);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const toggleDriverStatus = async (driver: Driver) => {
-    try {
-      const newStatus = driver.status === 'active' ? 'inactive' : 'active';
-      const { error } = await supabase
-        .from('drivers')
-        .update({ status: newStatus })
-        .eq('id', driver.id);
-
-      if (error) throw error;
-      await loadDrivers();
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    }
-  };
 
   const filteredDrivers = drivers.filter(driver =>
     driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -204,120 +120,16 @@ export default function Drivers() {
               </View>
             </View>
 
-            <View style={styles.driverActions}>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: driver.status === 'active' ? '#FEE2E2' : '#D1FAE5' }]}
-                onPress={() => toggleDriverStatus(driver)}
-              >
-                <Text style={[styles.actionText, { color: driver.status === 'active' ? '#DC2626' : '#10B981' }]}>
-                  {driver.status === 'active' ? 'Deactivate' : 'Activate'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#FEE2E2' }]}
-                onPress={() => handleDeleteDriver(driver.id)}
-              >
-                <Text style={[styles.actionText, { color: '#DC2626' }]}>Delete</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         ))}
 
         {filteredDrivers.length === 0 && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No drivers found</Text>
-            <Text style={styles.emptySubtext}>Add your first driver to get started</Text>
+            <Text style={styles.emptySubtext}>Contact support to add drivers</Text>
           </View>
         )}
-
-        <TouchableOpacity
-          style={styles.addDriverButton}
-          onPress={() => setModalVisible(true)}
-        >
-          <Plus size={24} color="#DC2626" />
-          <Text style={styles.addDriverText}>Add New Driver</Text>
-          <Text style={styles.addDriverSubtext}>Expand your fleet team</Text>
-        </TouchableOpacity>
       </ScrollView>
-
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add New Driver</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Full Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter driver name"
-                  value={formData.name}
-                  onChangeText={(text) => setFormData({ ...formData, name: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone Number *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter phone number"
-                  keyboardType="phone-pad"
-                  value={formData.phone}
-                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter email address"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={formData.email}
-                  onChangeText={(text) => setFormData({ ...formData, email: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>License Number *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter license number"
-                  autoCapitalize="characters"
-                  value={formData.license_number}
-                  onChangeText={(text) => setFormData({ ...formData, license_number: text })}
-                />
-              </View>
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={() => setModalVisible(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.submitButton]}
-                  onPress={handleAddDriver}
-                >
-                  <Text style={styles.submitButtonText}>Add Driver</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -445,21 +257,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textTransform: 'capitalize',
   },
-  driverActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  actionText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 48,
@@ -473,96 +270,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginTop: 8,
-  },
-  addDriverButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 24,
-    borderWidth: 2,
-    borderColor: '#FEE2E2',
-    borderStyle: 'dashed',
-  },
-  addDriverText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#DC2626',
-    marginTop: 8,
-  },
-  addDriverSubtext: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#111827',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#F3F4F6',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  submitButton: {
-    backgroundColor: '#DC2626',
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 });
