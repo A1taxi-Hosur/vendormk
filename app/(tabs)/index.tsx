@@ -26,7 +26,6 @@ export default function Dashboard() {
           onPress: async () => {
             try {
               await signOut();
-              router.replace('/auth');
             } catch (error: any) {
               Alert.alert('Error', error.message);
             }
