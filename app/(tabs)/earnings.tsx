@@ -12,7 +12,7 @@ type DailyEarning = {
   commissionAmount: number;
 };
 
-export default function Earnings() {
+export default function Commissions() {
   const { vendor } = useAuth();
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,11 +108,11 @@ export default function Earnings() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Earnings</Text>
+          <Text style={styles.headerTitle}>Commissions</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#DC2626" />
-          <Text style={styles.loadingText}>Loading earnings...</Text>
+          <Text style={styles.loadingText}>Loading commissions...</Text>
         </View>
       </View>
     );
@@ -122,7 +122,7 @@ export default function Earnings() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Earnings</Text>
+          <Text style={styles.headerTitle}>Commissions</Text>
           <Text style={styles.headerSubtitle}>Driver allowances owed to you</Text>
         </View>
         <TouchableOpacity style={styles.downloadButton}>
