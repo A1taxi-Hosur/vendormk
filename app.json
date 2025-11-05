@@ -33,6 +33,9 @@
       "eas": {
         "projectId": "7075a6c4-923a-46d7-b84d-4d26f9ec1ea5"
       }
+    },
+    "android": {
+      "package": "com.a1taxi.boltexponativewind"
     }
   }
 }
