@@ -1,52 +1,85 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native';
-import { Search, Phone, Mail, CreditCard } from 'lucide-react-native';
-import { supabase, Driver } from '@/lib/supabase';
+import { Search, Phone, Mail, CreditCard, Car } from 'lucide-react-native';
+import { supabase, ParsedDriver } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
 export default function Drivers() {
   const { vendor } = useAuth();
-  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [drivers, setDrivers] = useState<ParsedDriver[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (vendor) {
-      loadDrivers();
+      loadDriversFromVendorDetails();
     } else {
       setLoading(false);
     }
   }, [vendor]);
 
-  const loadDrivers = async () => {
+  const parseDriverDetails = (driverDetailsText: string): ParsedDriver[] => {
+    if (!driverDetailsText || driverDetailsText.trim() === '' || driverDetailsText === 'EMPTY') {
+      return [];
+    }
+
+    const lines = driverDetailsText.split('\n').filter(line => line.trim() !== '');
+    const parsedDrivers: ParsedDriver[] = [];
+
+    lines.forEach((line, index) => {
+      const driverMatch = line.match(/Driver:\s*([^|]+)/);
+      const phoneMatch = line.match(/Phone:\s*([^|]+)/);
+      const licenseMatch = line.match(/License:\s*([^|]+)/);
+      const vehicleMatch = line.match(/Vehicle:\s*([^(]+)/);
+      const vehicleDetailsMatch = line.match(/\(([^)]+)\)/);
+
+      if (driverMatch) {
+        parsedDrivers.push({
+          id: `driver-${index}`,
+          name: driverMatch[1].trim(),
+          phone: phoneMatch ? phoneMatch[1].trim() : 'N/A',
+          license: licenseMatch ? licenseMatch[1].trim() : 'N/A',
+          vehicle: vehicleMatch ? vehicleMatch[1].trim() : 'N/A',
+          vehicleDetails: vehicleDetailsMatch ? vehicleDetailsMatch[1].trim() : '',
+        });
+      }
+    });
+
+    return parsedDrivers;
+  };
+
+  const loadDriversFromVendorDetails = async () => {
     if (!vendor) return;
 
     try {
       const { data, error } = await supabase
-        .from('drivers')
-        .select('*')
-        .eq('vendor_id', vendor.vendor_id)
-        .order('created_at', { ascending: false });
+        .from('vendors')
+        .select('driver_details')
+        .eq('id', vendor.vendor_id)
+        .maybeSingle();
 
       if (error) throw error;
-      setDrivers(data || []);
+
+      if (data && data.driver_details) {
+        const parsedDrivers = parseDriverDetails(data.driver_details);
+        setDrivers(parsedDrivers);
+      } else {
+        setDrivers([]);
+      }
     } catch (error) {
       console.error('Error loading drivers:', error);
+      setDrivers([]);
     } finally {
       setLoading(false);
     }
   };
 
-
-
   const filteredDrivers = drivers.filter(driver =>
     driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     driver.phone.includes(searchQuery) ||
-    driver.license_number.toLowerCase().includes(searchQuery.toLowerCase())
+    driver.license.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    driver.vehicle.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const activeDrivers = drivers.filter(d => d.status === 'active').length;
-  const inactiveDrivers = drivers.filter(d => d.status === 'inactive').length;
 
   if (loading) {
     return (
@@ -65,7 +98,7 @@ export default function Drivers() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Driver Management</Text>
-        <Text style={styles.headerSubtitle}>Manage your fleet drivers</Text>
+        <Text style={styles.headerSubtitle}>View your fleet drivers</Text>
       </View>
 
       <View style={styles.searchContainer}>
@@ -80,17 +113,13 @@ export default function Drivers() {
       </View>
 
       <View style={styles.statsRow}>
-        <View style={[styles.miniCard, { backgroundColor: '#10B981' }]}>
-          <Text style={styles.miniCardNumber}>{activeDrivers}</Text>
-          <Text style={styles.miniCardLabel}>Active</Text>
-        </View>
-        <View style={[styles.miniCard, { backgroundColor: '#EF4444' }]}>
-          <Text style={styles.miniCardNumber}>{inactiveDrivers}</Text>
-          <Text style={styles.miniCardLabel}>Inactive</Text>
-        </View>
         <View style={[styles.miniCard, { backgroundColor: '#DC2626' }]}>
           <Text style={styles.miniCardNumber}>{drivers.length}</Text>
-          <Text style={styles.miniCardLabel}>Total</Text>
+          <Text style={styles.miniCardLabel}>Total Drivers</Text>
+        </View>
+        <View style={[styles.miniCard, { backgroundColor: '#10B981' }]}>
+          <Text style={styles.miniCardNumber}>{filteredDrivers.length}</Text>
+          <Text style={styles.miniCardLabel}>Showing</Text>
         </View>
       </View>
 
@@ -104,22 +133,22 @@ export default function Drivers() {
                   <Phone size={14} color="#6B7280" />
                   <Text style={styles.detailText}>{driver.phone}</Text>
                 </View>
-                {driver.email && (
-                  <View style={styles.detailRow}>
-                    <Mail size={14} color="#6B7280" />
-                    <Text style={styles.detailText}>{driver.email}</Text>
-                  </View>
-                )}
                 <View style={styles.detailRow}>
                   <CreditCard size={14} color="#6B7280" />
-                  <Text style={styles.detailText}>{driver.license_number}</Text>
+                  <Text style={styles.detailText}>{driver.license}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Car size={14} color="#6B7280" />
+                  <Text style={styles.detailText}>
+                    {driver.vehicle}
+                    {driver.vehicleDetails && ` (${driver.vehicleDetails})`}
+                  </Text>
                 </View>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: driver.status === 'active' ? '#10B981' : '#EF4444' }]}>
-                <Text style={styles.statusText}>{driver.status}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: '#10B981' }]}>
+                <Text style={styles.statusText}>active</Text>
               </View>
             </View>
-
           </View>
         ))}
 
@@ -224,7 +253,6 @@ const styles = StyleSheet.create({
   driverHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
   },
   driverInfo: {
     flex: 1,
@@ -244,6 +272,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginLeft: 6,
+    flex: 1,
   },
   statusBadge: {
     paddingHorizontal: 12,

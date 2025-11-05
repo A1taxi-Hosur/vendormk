@@ -68,8 +68,18 @@ export type Vendor = {
   name: string;
   email: string;
   phone: string | null;
+  driver_details: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ParsedDriver = {
+  id: string;
+  name: string;
+  phone: string;
+  license: string;
+  vehicle: string;
+  vehicleDetails: string;
 };
 
 export type Commission = {
