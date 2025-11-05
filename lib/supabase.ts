@@ -87,7 +87,9 @@ export type Commission = {
   vendor_id: string;
   commission_amount: string;
   commission_date: string;
+  driver_allowance: string | null;
   notes: string | null;
+  vendor_name: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
