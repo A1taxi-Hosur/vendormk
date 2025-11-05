@@ -4,8 +4,6 @@ import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X, ChevronLeft, ChevronRight
 import { supabase, Wallet as WalletType, WalletTransaction, Commission } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
-const ADMIN_DAILY_ALLOCATION = 10000;
-
 export default function WalletScreen() {
   const { vendor } = useAuth();
   const [wallet, setWallet] = useState<WalletType | null>(null);
@@ -17,6 +15,7 @@ export default function WalletScreen() {
   const [description, setDescription] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [calculatedBalance, setCalculatedBalance] = useState(0);
+  const [totalAllocated, setTotalAllocated] = useState(0);
   const [totalDeducted, setTotalDeducted] = useState(0);
 
   useEffect(() => {
@@ -43,21 +42,24 @@ export default function WalletScreen() {
     try {
       const { data, error } = await supabase
         .from('commissions')
-        .select('driver_allowance')
+        .select('commission_amount, driver_allowance')
         .eq('vendor_id', vendor.vendor_id)
         .eq('commission_date', dateString)
         .maybeSingle();
 
       if (error) throw error;
 
+      const adminAllocated = data?.commission_amount ? parseFloat(data.commission_amount) : 0;
       const driverAllowance = data?.driver_allowance ? parseFloat(data.driver_allowance) : 0;
-      const balance = ADMIN_DAILY_ALLOCATION - driverAllowance;
+      const balance = adminAllocated - driverAllowance;
 
+      setTotalAllocated(adminAllocated);
       setCalculatedBalance(balance);
       setTotalDeducted(driverAllowance);
     } catch (error) {
       console.error('Error calculating balance:', error);
-      setCalculatedBalance(ADMIN_DAILY_ALLOCATION);
+      setTotalAllocated(0);
+      setCalculatedBalance(0);
       setTotalDeducted(0);
     }
   };
@@ -314,7 +316,7 @@ export default function WalletScreen() {
             <View style={styles.miniStatsRow}>
               <View style={styles.miniStatItem}>
                 <Text style={styles.miniStatLabel}>Allocated</Text>
-                <Text style={styles.miniStatValue}>₹{ADMIN_DAILY_ALLOCATION.toLocaleString('en-IN')}</Text>
+                <Text style={styles.miniStatValue}>₹{totalAllocated.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
               </View>
               <View style={styles.miniStatItem}>
                 <Text style={styles.miniStatLabel}>Deducted</Text>
@@ -331,7 +333,7 @@ export default function WalletScreen() {
           <View style={styles.infoTextContainer}>
             <Text style={styles.infoTitle}>Wallet Calculation</Text>
             <Text style={styles.infoText}>
-              Balance = Admin Daily Allocation (₹{ADMIN_DAILY_ALLOCATION.toLocaleString('en-IN')}) - Driver Allowances for selected date
+              Balance = Admin Commission Credit - Driver Allowances for selected date
             </Text>
           </View>
         </View>
