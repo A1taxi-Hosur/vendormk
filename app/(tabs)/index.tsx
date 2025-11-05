@@ -241,33 +241,6 @@ export default function Dashboard() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push('/drivers')}
-            >
-              <Users size={24} color="#DC2626" />
-              <Text style={styles.actionText}>Add Driver</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push('/fleet')}
-            >
-              <Car size={24} color="#DC2626" />
-              <Text style={styles.actionText}>Add Vehicle</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push('/wallet')}
-            >
-              <Wallet size={24} color="#DC2626" />
-              <Text style={styles.actionText}>Add Credit</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Today's Wallet Summary</Text>
           <View style={styles.walletSummary}>
             <View style={styles.summaryRow}>
@@ -452,28 +425,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#E5E7EB',
     marginVertical: 12,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  actionText: {
-    fontSize: 13,
-    color: '#DC2626',
-    marginTop: 8,
-    fontWeight: '600',
   },
   walletSummary: {
     backgroundColor: '#FFFFFF',
