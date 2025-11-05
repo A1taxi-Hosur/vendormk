@@ -13,6 +13,9 @@ export default function Dashboard() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [wallet, setWallet] = useState<WalletType | null>(null);
+  const [calculatedBalance, setCalculatedBalance] = useState(0);
+  const [totalAllocated, setTotalAllocated] = useState(0);
+  const [totalDeducted, setTotalDeducted] = useState(0);
 
   const handleSignOut = async () => {
     console.log('Logout button clicked');
@@ -62,15 +65,40 @@ export default function Dashboard() {
     if (!vendor) return;
 
     try {
-      const [driversData, vehiclesData, walletData] = await Promise.all([
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayString = `${year}-${month}-${day}`;
+
+      const [driversData, vehiclesData, walletData, commissionData] = await Promise.all([
         supabase.from('drivers').select('*').eq('vendor_id', vendor.vendor_id),
         supabase.from('vehicles').select('*').eq('vendor_id', vendor.vendor_id),
         supabase.from('wallets').select('*').eq('vendor_id', vendor.vendor_id).maybeSingle(),
+        supabase.from('commissions')
+          .select('commission_amount, driver_allowance')
+          .eq('vendor_id', vendor.vendor_id)
+          .eq('commission_date', todayString)
+          .maybeSingle(),
       ]);
 
       if (driversData.data) setDrivers(driversData.data);
       if (vehiclesData.data) setVehicles(vehiclesData.data);
       if (walletData.data) setWallet(walletData.data);
+
+      if (commissionData.data) {
+        const allocated = commissionData.data.commission_amount ? parseFloat(commissionData.data.commission_amount) : 0;
+        const deducted = commissionData.data.driver_allowance ? parseFloat(commissionData.data.driver_allowance) : 0;
+        const balance = allocated - deducted;
+
+        setTotalAllocated(allocated);
+        setTotalDeducted(deducted);
+        setCalculatedBalance(balance);
+      } else {
+        setTotalAllocated(0);
+        setTotalDeducted(0);
+        setCalculatedBalance(0);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -153,10 +181,10 @@ export default function Dashboard() {
           >
             <Wallet size={28} color="#FFFFFF" />
             <Text style={styles.statNumber}>
-              ₹{parseFloat(wallet?.balance || '0').toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              ₹{calculatedBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
             </Text>
-            <Text style={styles.statLabel}>Wallet Balance</Text>
-            <Text style={styles.statSubLabel}>Available funds</Text>
+            <Text style={styles.statLabel}>Today's Balance</Text>
+            <Text style={styles.statSubLabel}>Commission - Allowance</Text>
           </TouchableOpacity>
 
           <View style={[styles.statCard, styles.infoCard]}>
@@ -240,25 +268,25 @@ export default function Dashboard() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Wallet Summary</Text>
+          <Text style={styles.sectionTitle}>Today's Wallet Summary</Text>
           <View style={styles.walletSummary}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total Credited</Text>
+              <Text style={styles.summaryLabel}>Admin Allocated</Text>
               <Text style={styles.summaryValue}>
-                ₹{parseFloat(wallet?.total_credited || '0').toLocaleString('en-IN')}
+                ₹{totalAllocated.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total Debited</Text>
+              <Text style={styles.summaryLabel}>Driver Allowance</Text>
               <Text style={styles.summaryValue}>
-                ₹{parseFloat(wallet?.total_debited || '0').toLocaleString('en-IN')}
+                ₹{totalDeducted.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </Text>
             </View>
             <View style={styles.divider} />
             <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { fontWeight: '700', color: '#111827' }]}>Current Balance</Text>
+              <Text style={[styles.summaryLabel, { fontWeight: '700', color: '#111827' }]}>Today's Balance</Text>
               <Text style={[styles.summaryValue, { fontWeight: '700', color: '#DC2626', fontSize: 18 }]}>
-                ₹{parseFloat(wallet?.balance || '0').toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                ₹{calculatedBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </Text>
             </View>
           </View>

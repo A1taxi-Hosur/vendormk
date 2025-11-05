@@ -4,15 +4,18 @@ import { Car, User } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
-type DriverVehicle = {
-  driver_name: string;
-  vehicle_number: string;
-  vehicle_type: string;
+type ParsedDriver = {
+  id: string;
+  name: string;
+  phone: string;
+  license: string;
+  vehicle: string;
+  vehicleDetails: string;
 };
 
 export default function Fleet() {
   const { vendor } = useAuth();
-  const [driverVehicles, setDriverVehicles] = useState<DriverVehicle[]>([]);
+  const [drivers, setDrivers] = useState<ParsedDriver[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,6 +26,36 @@ export default function Fleet() {
     }
   }, [vendor]);
 
+  const parseDriverDetails = (driverDetailsText: string): ParsedDriver[] => {
+    if (!driverDetailsText || driverDetailsText.trim() === '' || driverDetailsText === 'EMPTY') {
+      return [];
+    }
+
+    const lines = driverDetailsText.split('\n').filter(line => line.trim() !== '');
+    const parsedDrivers: ParsedDriver[] = [];
+
+    lines.forEach((line, index) => {
+      const driverMatch = line.match(/Driver:\s*([^|]+)/);
+      const phoneMatch = line.match(/Phone:\s*([^|]+)/);
+      const licenseMatch = line.match(/License:\s*([^|]+)/);
+      const vehicleMatch = line.match(/Vehicle:\s*([^(]+)/);
+      const vehicleDetailsMatch = line.match(/\(([^)]+)\)/);
+
+      if (driverMatch) {
+        parsedDrivers.push({
+          id: `driver-${index}`,
+          name: driverMatch[1].trim(),
+          phone: phoneMatch ? phoneMatch[1].trim() : 'N/A',
+          license: licenseMatch ? licenseMatch[1].trim() : 'N/A',
+          vehicle: vehicleMatch ? vehicleMatch[1].trim() : 'N/A',
+          vehicleDetails: vehicleDetailsMatch ? vehicleDetailsMatch[1].trim() : '',
+        });
+      }
+    });
+
+    return parsedDrivers;
+  };
+
   const loadFleet = async () => {
     if (!vendor) return;
 
@@ -30,19 +63,20 @@ export default function Fleet() {
       const { data, error } = await supabase
         .from('vendors')
         .select('driver_details')
-        .eq('vendor_id', vendor.vendor_id)
+        .eq('id', vendor.vendor_id)
         .maybeSingle();
 
       if (error) throw error;
 
-      if (data?.driver_details && Array.isArray(data.driver_details)) {
-        setDriverVehicles(data.driver_details as DriverVehicle[]);
+      if (data && data.driver_details) {
+        const parsedDrivers = parseDriverDetails(data.driver_details);
+        setDrivers(parsedDrivers);
       } else {
-        setDriverVehicles([]);
+        setDrivers([]);
       }
     } catch (error) {
       console.error('Error loading fleet:', error);
-      setDriverVehicles([]);
+      setDrivers([]);
     } finally {
       setLoading(false);
     }
@@ -71,13 +105,13 @@ export default function Fleet() {
       <View style={styles.statsCard}>
         <Car size={24} color="#DC2626" />
         <View style={styles.statsInfo}>
-          <Text style={styles.statsNumber}>{driverVehicles.length}</Text>
+          <Text style={styles.statsNumber}>{drivers.length}</Text>
           <Text style={styles.statsLabel}>Total Drivers with Vehicles</Text>
         </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {driverVehicles.length === 0 && (
+        {drivers.length === 0 && (
           <View style={styles.emptyState}>
             <Car size={48} color="#D1D5DB" />
             <Text style={styles.emptyText}>No drivers found</Text>
@@ -85,18 +119,20 @@ export default function Fleet() {
           </View>
         )}
 
-        {driverVehicles.map((item, index) => (
-          <View key={index} style={styles.driverCard}>
+        {drivers.map((driver) => (
+          <View key={driver.id} style={styles.driverCard}>
             <View style={styles.iconContainer}>
               <User size={24} color="#DC2626" />
             </View>
             <View style={styles.driverInfo}>
-              <Text style={styles.driverName}>{item.driver_name}</Text>
+              <Text style={styles.driverName}>{driver.name}</Text>
               <View style={styles.vehicleRow}>
                 <Car size={16} color="#6B7280" />
-                <Text style={styles.vehicleNumber}>{item.vehicle_number}</Text>
+                <Text style={styles.vehicleNumber}>{driver.vehicle}</Text>
               </View>
-              <Text style={styles.vehicleType}>{item.vehicle_type.toUpperCase()}</Text>
+              {driver.vehicleDetails && (
+                <Text style={styles.vehicleType}>{driver.vehicleDetails.toUpperCase()}</Text>
+              )}
             </View>
           </View>
         ))}
