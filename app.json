@@ -25,6 +25,14 @@
       ],
       "expo-font",
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "root": "./app"
+      },
+      "eas": {
+        "projectId": "7075a6c4-923a-46d7-b84d-4d26f9ec1ea5"
+      }
+    }
   }
 }
