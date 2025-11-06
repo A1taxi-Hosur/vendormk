@@ -95,10 +95,12 @@ export default function Drivers() {
   const loadDriverAllowancesForDate = async (date: Date) => {
     if (!vendor) return;
 
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    const istDate = new Date(date);
+    istDate.setHours(0, 0, 0, 0);
+
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const utcStartOfDay = new Date(istDate.getTime() - IST_OFFSET);
+    const utcEndOfDay = new Date(istDate.getTime() + (24 * 60 * 60 * 1000) - IST_OFFSET - 1);
 
     try {
       const { data: driversFromDB, error: driversError } = await supabase
@@ -126,26 +128,26 @@ export default function Drivers() {
           .from('trip_completions')
           .select('driver_id, total_amount_owed')
           .in('driver_id', driverIds)
-          .gte('completed_at', startOfDay.toISOString())
-          .lte('completed_at', endOfDay.toISOString()),
+          .gte('completed_at', utcStartOfDay.toISOString())
+          .lte('completed_at', utcEndOfDay.toISOString()),
         supabase
           .from('rental_trip_completions')
           .select('driver_id, total_amount_owed')
           .in('driver_id', driverIds)
-          .gte('completed_at', startOfDay.toISOString())
-          .lte('completed_at', endOfDay.toISOString()),
+          .gte('completed_at', utcStartOfDay.toISOString())
+          .lte('completed_at', utcEndOfDay.toISOString()),
         supabase
           .from('outstation_trip_completions')
           .select('driver_id, total_amount_owed')
           .in('driver_id', driverIds)
-          .gte('completed_at', startOfDay.toISOString())
-          .lte('completed_at', endOfDay.toISOString()),
+          .gte('completed_at', utcStartOfDay.toISOString())
+          .lte('completed_at', utcEndOfDay.toISOString()),
         supabase
           .from('airport_trip_completions')
           .select('driver_id, total_amount_owed')
           .in('driver_id', driverIds)
-          .gte('completed_at', startOfDay.toISOString())
-          .lte('completed_at', endOfDay.toISOString())
+          .gte('completed_at', utcStartOfDay.toISOString())
+          .lte('completed_at', utcEndOfDay.toISOString())
       ]);
 
       const allTrips = [
