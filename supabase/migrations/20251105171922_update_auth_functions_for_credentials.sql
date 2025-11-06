@@ -97,3 +97,10 @@ BEGIN
   RETURN true;
 END;
 $$;
+
+-- Grant execute permissions to anon and authenticated roles
+GRANT EXECUTE ON FUNCTION verify_vendor_login(text, text) TO anon;
+GRANT EXECUTE ON FUNCTION verify_vendor_login(text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION create_vendor(text, text, text, text, text) TO anon;
+GRANT EXECUTE ON FUNCTION create_vendor(text, text, text, text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION update_vendor_password(uuid, text, text) TO authenticated;
