@@ -114,27 +114,54 @@ export default function Drivers() {
       }
 
       const driverIds = driversFromDB.map(d => d.id);
-
-      const { data: tripsData, error: tripsError } = await supabase
-        .from('trip_completions')
-        .select('driver_id, commission_amount, driver_allowance, completed_at')
-        .in('driver_id', driverIds)
-        .gte('completed_at', startOfDay.toISOString())
-        .lte('completed_at', endOfDay.toISOString());
-
-      if (tripsError) throw tripsError;
-
       const earningsMap = new Map<string, number>();
-      let total = 0;
 
-      if (tripsData) {
-        tripsData.forEach((trip: any) => {
-          const commission = parseFloat(trip.commission_amount || '0');
-          const current = earningsMap.get(trip.driver_id) || 0;
-          earningsMap.set(trip.driver_id, current + commission);
-          total += commission;
-        });
-      }
+      const [
+        { data: tripCompletions },
+        { data: rentalTrips },
+        { data: outstationTrips },
+        { data: airportTrips }
+      ] = await Promise.all([
+        supabase
+          .from('trip_completions')
+          .select('driver_id, total_amount_owed')
+          .in('driver_id', driverIds)
+          .gte('completed_at', startOfDay.toISOString())
+          .lte('completed_at', endOfDay.toISOString()),
+        supabase
+          .from('rental_trip_completions')
+          .select('driver_id, total_amount_owed')
+          .in('driver_id', driverIds)
+          .gte('completed_at', startOfDay.toISOString())
+          .lte('completed_at', endOfDay.toISOString()),
+        supabase
+          .from('outstation_trip_completions')
+          .select('driver_id, total_amount_owed')
+          .in('driver_id', driverIds)
+          .gte('completed_at', startOfDay.toISOString())
+          .lte('completed_at', endOfDay.toISOString()),
+        supabase
+          .from('airport_trip_completions')
+          .select('driver_id, total_amount_owed')
+          .in('driver_id', driverIds)
+          .gte('completed_at', startOfDay.toISOString())
+          .lte('completed_at', endOfDay.toISOString())
+      ]);
+
+      const allTrips = [
+        ...(tripCompletions || []),
+        ...(rentalTrips || []),
+        ...(outstationTrips || []),
+        ...(airportTrips || [])
+      ];
+
+      let total = 0;
+      allTrips.forEach((trip: any) => {
+        const amount = parseFloat(trip.total_amount_owed || '0');
+        const current = earningsMap.get(trip.driver_id) || 0;
+        earningsMap.set(trip.driver_id, current + amount);
+        total += amount;
+      });
 
       setTotalAllowance(total);
 
