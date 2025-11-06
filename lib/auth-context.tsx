@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { storage } from './storage';
 
 type VendorSession = {
   vendor_id: string;
@@ -31,14 +32,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadVendorSession = async () => {
     try {
-      const storedVendor = localStorage.getItem(VENDOR_STORAGE_KEY);
+      const storedVendor = await storage.getItem(VENDOR_STORAGE_KEY);
       if (storedVendor) {
         const vendorData = JSON.parse(storedVendor);
         setVendor(vendorData);
       }
     } catch (error) {
       console.error('Error loading vendor session:', error);
-      localStorage.removeItem(VENDOR_STORAGE_KEY);
+      await storage.removeItem(VENDOR_STORAGE_KEY);
     } finally {
       setLoading(false);
     }
@@ -56,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const vendorData = data[0];
 
     setVendor(vendorData);
-    localStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendorData));
+    await storage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendorData));
   };
 
   const signUp = async (username: string, password: string, name: string, email: string, phone?: string) => {
@@ -80,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     setVendor(null);
-    localStorage.removeItem(VENDOR_STORAGE_KEY);
+    await storage.removeItem(VENDOR_STORAGE_KEY);
   };
 
   return (
