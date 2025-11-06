@@ -46,38 +46,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (username: string, password: string) => {
-    try {
-      console.log('[AUTH] Starting login for username:', username);
-      console.log('[AUTH] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+    const { data, error } = await supabase.rpc('verify_vendor_login', {
+      p_username: username,
+      p_password: password,
+    });
 
-      const { data, error } = await supabase.rpc('verify_vendor_login', {
-        p_username: username,
-        p_password: password,
-      });
+    if (error) throw new Error('Invalid username or password');
+    if (!data || data.length === 0) throw new Error('Invalid username or password');
 
-      console.log('[AUTH] RPC Response - Data:', data);
-      console.log('[AUTH] RPC Response - Error:', error);
+    const vendorData = data[0];
 
-      if (error) {
-        console.error('[AUTH] Supabase error:', JSON.stringify(error));
-        throw new Error(`Login failed: ${error.message || 'Invalid username or password'}`);
-      }
-
-      if (!data || data.length === 0) {
-        console.error('[AUTH] No data returned from verify_vendor_login');
-        throw new Error('Invalid username or password');
-      }
-
-      const vendorData = data[0];
-      console.log('[AUTH] Login successful, vendor data:', vendorData);
-
-      setVendor(vendorData);
-      await storage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendorData));
-      console.log('[AUTH] Session saved to storage');
-    } catch (err: any) {
-      console.error('[AUTH] Sign in error:', err);
-      throw err;
-    }
+    setVendor(vendorData);
+    await storage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendorData));
   };
 
   const signUp = async (username: string, password: string, name: string, email: string, phone?: string) => {

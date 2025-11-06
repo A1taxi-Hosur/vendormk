@@ -37,16 +37,11 @@ export default function AuthScreen() {
         setPassword('');
         setCompanyName('');
       } else {
-        console.log('[AUTH SCREEN] Attempting sign in...');
         await signIn(username, password);
-        console.log('[AUTH SCREEN] Sign in successful, navigating...');
         router.replace('/(tabs)');
       }
     } catch (error: any) {
-      console.error('[AUTH SCREEN] Authentication error:', error);
-      const errorMessage = error.message || 'Authentication failed';
-      console.log('[AUTH SCREEN] Showing error alert:', errorMessage);
-      Alert.alert('Authentication Error', errorMessage + '\n\nCheck console logs for details.');
+      Alert.alert('Error', error.message || 'Authentication failed');
     } finally {
       setLoading(false);
     }
