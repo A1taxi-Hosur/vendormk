@@ -1,16 +1,25 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Search, Phone, CreditCard, Car, ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { supabase, ParsedDriver, Commission } from '@/lib/supabase';
+import { supabase, DriverDailyAllowance } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+
+type DriverWithAllowance = {
+  id: string;
+  name: string;
+  phone: string;
+  license: string;
+  vehicle: string;
+  vehicleDetails: string;
+  allowance?: number;
+};
 
 export default function Drivers() {
   const { vendor } = useAuth();
-  const [drivers, setDrivers] = useState<ParsedDriver[]>([]);
+  const [drivers, setDrivers] = useState<DriverWithAllowance[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [driverAllowances, setDriverAllowances] = useState<{ [key: string]: number }>({});
   const [totalAllowance, setTotalAllowance] = useState(0);
 
   useEffect(() => {
@@ -92,31 +101,53 @@ export default function Drivers() {
     const dateString = `${year}-${month}-${day}`;
 
     try {
-      const { data, error } = await supabase
-        .from('commissions')
-        .select('driver_allowance')
+      const { data: driversFromDB, error: driversError } = await supabase
+        .from('drivers')
+        .select('id, name, phone_number, license_number')
+        .eq('vendor_id', vendor.vendor_id);
+
+      if (driversError) throw driversError;
+
+      const { data: allowancesData, error: allowancesError } = await supabase
+        .from('driver_daily_allowances')
+        .select('*')
         .eq('vendor_id', vendor.vendor_id)
-        .eq('commission_date', dateString)
-        .maybeSingle();
+        .eq('allowance_date', dateString);
 
-      if (error) throw error;
+      if (allowancesError) throw allowancesError;
 
-      const total = data?.driver_allowance ? parseFloat(data.driver_allowance) : 0;
+      const allowanceMap = new Map<string, number>();
+      let total = 0;
+
+      if (allowancesData) {
+        allowancesData.forEach((allowance: DriverDailyAllowance) => {
+          const amount = parseFloat(allowance.allowance_amount);
+          allowanceMap.set(allowance.driver_id, amount);
+          total += amount;
+        });
+      }
+
       setTotalAllowance(total);
 
-      if (total > 0 && drivers.length > 0) {
-        const perDriverAllowance = total / drivers.length;
-        const allowances: { [key: string]: number } = {};
-        drivers.forEach(driver => {
-          allowances[driver.id] = perDriverAllowance;
-        });
-        setDriverAllowances(allowances);
-      } else {
-        setDriverAllowances({});
-      }
+      const updatedDrivers = drivers.map(driver => {
+        const dbDriver = driversFromDB?.find(
+          d => d.name.toLowerCase() === driver.name.toLowerCase() ||
+               d.phone_number === driver.phone
+        );
+
+        const driverId = dbDriver?.id || driver.id;
+        const allowance = allowanceMap.get(driverId) || 0;
+
+        return {
+          ...driver,
+          id: driverId,
+          allowance
+        };
+      });
+
+      setDrivers(updatedDrivers);
     } catch (error) {
       console.error('Error loading driver allowances:', error);
-      setDriverAllowances({});
       setTotalAllowance(0);
     }
   };
@@ -308,17 +339,17 @@ export default function Drivers() {
                 </View>
               </View>
               <View style={styles.allowanceContainer}>
-                {driverAllowances[driver.id] !== undefined && driverAllowances[driver.id] > 0 ? (
+                {driver.allowance !== undefined && driver.allowance > 0 ? (
                   <>
                     <Text style={styles.allowanceAmount}>
-                      ₹{driverAllowances[driver.id].toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      ₹{driver.allowance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                     </Text>
-                    <Text style={styles.allowanceLabel}>Allowance</Text>
+                    <Text style={styles.allowanceLabel}>Earned</Text>
                   </>
                 ) : (
                   <>
                     <Text style={styles.noAllowanceText}>₹0.00</Text>
-                    <Text style={styles.allowanceLabel}>No Allowance</Text>
+                    <Text style={styles.allowanceLabel}>No Earnings</Text>
                   </>
                 )}
               </View>

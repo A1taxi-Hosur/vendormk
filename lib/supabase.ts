@@ -99,6 +99,19 @@ export type ParsedDriver = {
   vehicleDetails: string;
 };
 
+export type DriverDailyAllowance = {
+  id: string;
+  vendor_id: string;
+  driver_id: string;
+  driver_name: string;
+  driver_phone: string | null;
+  allowance_date: string;
+  allowance_amount: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Commission = {
   id: string;
   vendor_id: string;
