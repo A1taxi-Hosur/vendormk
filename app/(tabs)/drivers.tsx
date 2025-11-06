@@ -95,35 +95,44 @@ export default function Drivers() {
   const loadDriverAllowancesForDate = async (date: Date) => {
     if (!vendor) return;
 
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const dateString = `${year}-${month}-${day}`;
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
 
     try {
       const { data: driversFromDB, error: driversError } = await supabase
         .from('drivers')
-        .select('id, name, phone_number, license_number')
+        .select('id, name, phone_number, license_number, vendor_id')
         .eq('vendor_id', vendor.vendor_id);
 
       if (driversError) throw driversError;
 
-      const { data: allowancesData, error: allowancesError } = await supabase
-        .from('driver_daily_allowances')
-        .select('*')
-        .eq('vendor_id', vendor.vendor_id)
-        .eq('allowance_date', dateString);
+      if (!driversFromDB || driversFromDB.length === 0) {
+        setTotalAllowance(0);
+        return;
+      }
 
-      if (allowancesError) throw allowancesError;
+      const driverIds = driversFromDB.map(d => d.id);
 
-      const allowanceMap = new Map<string, number>();
+      const { data: tripsData, error: tripsError } = await supabase
+        .from('trip_completions')
+        .select('driver_id, commission_amount, driver_allowance, completed_at')
+        .in('driver_id', driverIds)
+        .gte('completed_at', startOfDay.toISOString())
+        .lte('completed_at', endOfDay.toISOString());
+
+      if (tripsError) throw tripsError;
+
+      const earningsMap = new Map<string, number>();
       let total = 0;
 
-      if (allowancesData) {
-        allowancesData.forEach((allowance: DriverDailyAllowance) => {
-          const amount = parseFloat(allowance.allowance_amount);
-          allowanceMap.set(allowance.driver_id, amount);
-          total += amount;
+      if (tripsData) {
+        tripsData.forEach((trip: any) => {
+          const commission = parseFloat(trip.commission_amount || '0');
+          const current = earningsMap.get(trip.driver_id) || 0;
+          earningsMap.set(trip.driver_id, current + commission);
+          total += commission;
         });
       }
 
@@ -136,7 +145,7 @@ export default function Drivers() {
         );
 
         const driverId = dbDriver?.id || driver.id;
-        const allowance = allowanceMap.get(driverId) || 0;
+        const allowance = earningsMap.get(driverId) || 0;
 
         return {
           ...driver,
