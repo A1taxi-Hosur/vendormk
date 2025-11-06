@@ -1,11 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 import 'react-native-url-polyfill/auto';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+console.log('[SUPABASE] Environment check:');
+console.log('[SUPABASE] process.env.EXPO_PUBLIC_SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+console.log('[SUPABASE] Constants.expoConfig?.extra?.supabaseUrl:', Constants.expoConfig?.extra?.supabaseUrl);
+console.log('[SUPABASE] Constants.expoConfig?.extra:', JSON.stringify(Constants.expoConfig?.extra));
+
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  Constants.expoConfig?.extra?.supabaseUrl ||
+  '';
+
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  Constants.expoConfig?.extra?.supabaseAnonKey ||
+  '';
+
+console.log('[SUPABASE] Final URL:', supabaseUrl);
+console.log('[SUPABASE] Final Key:', supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'MISSING');
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Missing Supabase environment variables');
+  console.warn('[SUPABASE] WARNING: Missing Supabase environment variables!');
+  console.warn('[SUPABASE] You need to rebuild the APK with: eas build --platform android --profile preview');
 }
 
 export const supabase = createClient(
