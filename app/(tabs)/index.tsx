@@ -186,7 +186,7 @@ export default function Dashboard() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Vendor Dashboard</Text>
+          <Text style={styles.headerTitle}>A1 Vendor</Text>
           <Text style={styles.headerSubtitle}>Fleet Management System</Text>
           {vendor?.name && <Text style={styles.headerEmail}>{vendor.name}</Text>}
         </View>
