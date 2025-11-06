@@ -71,6 +71,13 @@ export default function Dashboard() {
       const day = String(today.getDate()).padStart(2, '0');
       const todayString = `${year}-${month}-${day}`;
 
+      const istDate = new Date(today);
+      istDate.setHours(0, 0, 0, 0);
+
+      const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+      const utcStartOfDay = new Date(istDate.getTime() - IST_OFFSET);
+      const utcEndOfDay = new Date(istDate.getTime() + (24 * 60 * 60 * 1000) - IST_OFFSET - 1);
+
       const [driversData, vehiclesData, walletData, commissionData] = await Promise.all([
         supabase.from('drivers').select('*').eq('vendor_id', vendor.vendor_id),
         supabase.from('vehicles').select('*').eq('vendor_id', vendor.vendor_id),
@@ -86,18 +93,64 @@ export default function Dashboard() {
       if (vehiclesData.data) setVehicles(vehiclesData.data);
       if (walletData.data) setWallet(walletData.data);
 
-      if (commissionData.data) {
-        const allocated = commissionData.data.commission_amount ? parseFloat(commissionData.data.commission_amount) : 0;
-        const deducted = commissionData.data.driver_allowance ? parseFloat(commissionData.data.driver_allowance) : 0;
+      const allocated = commissionData.data?.commission_amount ? parseFloat(commissionData.data.commission_amount) : 0;
+
+      if (!driversData.data || driversData.data.length === 0) {
+        setTotalAllocated(allocated);
+        setTotalDeducted(0);
+        setCalculatedBalance(allocated);
+      } else {
+        const driverIds = driversData.data.map(d => d.id);
+
+        const [
+          { data: tripCompletions },
+          { data: rentalTrips },
+          { data: outstationTrips },
+          { data: airportTrips }
+        ] = await Promise.all([
+          supabase
+            .from('trip_completions')
+            .select('total_amount_owed')
+            .in('driver_id', driverIds)
+            .gte('completed_at', utcStartOfDay.toISOString())
+            .lte('completed_at', utcEndOfDay.toISOString()),
+          supabase
+            .from('rental_trip_completions')
+            .select('total_amount_owed')
+            .in('driver_id', driverIds)
+            .gte('completed_at', utcStartOfDay.toISOString())
+            .lte('completed_at', utcEndOfDay.toISOString()),
+          supabase
+            .from('outstation_trip_completions')
+            .select('total_amount_owed')
+            .in('driver_id', driverIds)
+            .gte('completed_at', utcStartOfDay.toISOString())
+            .lte('completed_at', utcEndOfDay.toISOString()),
+          supabase
+            .from('airport_trip_completions')
+            .select('total_amount_owed')
+            .in('driver_id', driverIds)
+            .gte('completed_at', utcStartOfDay.toISOString())
+            .lte('completed_at', utcEndOfDay.toISOString())
+        ]);
+
+        const allTrips = [
+          ...(tripCompletions || []),
+          ...(rentalTrips || []),
+          ...(outstationTrips || []),
+          ...(airportTrips || [])
+        ];
+
+        let deducted = 0;
+        allTrips.forEach((trip: any) => {
+          deducted += parseFloat(trip.total_amount_owed || '0');
+        });
+
         const balance = allocated - deducted;
 
         setTotalAllocated(allocated);
         setTotalDeducted(deducted);
         setCalculatedBalance(balance);
-      } else {
-        setTotalAllocated(0);
-        setTotalDeducted(0);
-        setCalculatedBalance(0);
       }
     } catch (error) {
       console.error('Error loading data:', error);

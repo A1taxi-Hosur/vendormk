@@ -42,18 +42,82 @@ export default function WalletScreen() {
     const day = String(date.getDate()).padStart(2, '0');
     const dateString = `${year}-${month}-${day}`;
 
+    const istDate = new Date(date);
+    istDate.setHours(0, 0, 0, 0);
+
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const utcStartOfDay = new Date(istDate.getTime() - IST_OFFSET);
+    const utcEndOfDay = new Date(istDate.getTime() + (24 * 60 * 60 * 1000) - IST_OFFSET - 1);
+
     try {
-      const { data, error } = await supabase
-        .from('commissions')
-        .select('commission_amount, driver_allowance')
-        .eq('vendor_id', vendor.vendor_id)
-        .eq('commission_date', dateString)
-        .maybeSingle();
+      const [commissionData, driversData] = await Promise.all([
+        supabase
+          .from('commissions')
+          .select('commission_amount, driver_allowance')
+          .eq('vendor_id', vendor.vendor_id)
+          .eq('commission_date', dateString)
+          .maybeSingle(),
+        supabase
+          .from('drivers')
+          .select('id')
+          .eq('vendor_id', vendor.vendor_id)
+      ]);
 
-      if (error) throw error;
+      const adminAllocated = commissionData.data?.commission_amount ? parseFloat(commissionData.data.commission_amount) : 0;
 
-      const adminAllocated = data?.commission_amount ? parseFloat(data.commission_amount) : 0;
-      const driverAllowance = data?.driver_allowance ? parseFloat(data.driver_allowance) : 0;
+      if (!driversData.data || driversData.data.length === 0) {
+        setTotalAllocated(adminAllocated);
+        setCalculatedBalance(adminAllocated);
+        setTotalDeducted(0);
+        return;
+      }
+
+      const driverIds = driversData.data.map(d => d.id);
+
+      const [
+        { data: tripCompletions },
+        { data: rentalTrips },
+        { data: outstationTrips },
+        { data: airportTrips }
+      ] = await Promise.all([
+        supabase
+          .from('trip_completions')
+          .select('total_amount_owed')
+          .in('driver_id', driverIds)
+          .gte('completed_at', utcStartOfDay.toISOString())
+          .lte('completed_at', utcEndOfDay.toISOString()),
+        supabase
+          .from('rental_trip_completions')
+          .select('total_amount_owed')
+          .in('driver_id', driverIds)
+          .gte('completed_at', utcStartOfDay.toISOString())
+          .lte('completed_at', utcEndOfDay.toISOString()),
+        supabase
+          .from('outstation_trip_completions')
+          .select('total_amount_owed')
+          .in('driver_id', driverIds)
+          .gte('completed_at', utcStartOfDay.toISOString())
+          .lte('completed_at', utcEndOfDay.toISOString()),
+        supabase
+          .from('airport_trip_completions')
+          .select('total_amount_owed')
+          .in('driver_id', driverIds)
+          .gte('completed_at', utcStartOfDay.toISOString())
+          .lte('completed_at', utcEndOfDay.toISOString())
+      ]);
+
+      const allTrips = [
+        ...(tripCompletions || []),
+        ...(rentalTrips || []),
+        ...(outstationTrips || []),
+        ...(airportTrips || [])
+      ];
+
+      let driverAllowance = 0;
+      allTrips.forEach((trip: any) => {
+        driverAllowance += parseFloat(trip.total_amount_owed || '0');
+      });
+
       const balance = adminAllocated - driverAllowance;
 
       setTotalAllocated(adminAllocated);
