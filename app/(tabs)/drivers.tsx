@@ -101,17 +101,17 @@ export default function Drivers() {
     const dateString = `${year}-${month}-${day}`;
 
     try {
-      const { data: dailyAmounts, error } = await supabase
-        .from('driver_daily_amounts_owed')
-        .select('driver_name, daily_total_owed')
-        .eq('aggregation_date', dateString);
+      const { data: dailyAmounts, error } = await supabase.rpc('get_driver_daily_amounts_for_vendor', {
+        p_vendor_id: vendor.vendor_id,
+        p_date: dateString
+      });
 
       if (error) throw error;
 
       const earningsMap = new Map<string, number>();
       let total = 0;
 
-      (dailyAmounts || []).forEach((record) => {
+      (dailyAmounts || []).forEach((record: any) => {
         const amount = parseFloat(record.daily_total_owed || '0');
         earningsMap.set(record.driver_name, amount);
         total += amount;
