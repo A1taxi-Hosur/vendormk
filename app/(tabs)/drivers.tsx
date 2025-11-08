@@ -95,92 +95,33 @@ export default function Drivers() {
   const loadDriverAllowancesForDate = async (date: Date) => {
     if (!vendor) return;
 
-    const istDate = new Date(date);
-    istDate.setHours(0, 0, 0, 0);
-
-    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-    const utcStartOfDay = new Date(istDate.getTime() - IST_OFFSET);
-    const utcEndOfDay = new Date(istDate.getTime() + (24 * 60 * 60 * 1000) - IST_OFFSET - 1);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
 
     try {
-      const { data: driversFromDB, error: driversError } = await supabase
-        .from('drivers')
-        .select('id, name, phone_number, license_number, vendor_id')
-        .eq('vendor_id', vendor.vendor_id);
+      const { data: dailyAmounts, error } = await supabase
+        .from('driver_daily_amounts_owed')
+        .select('driver_name, daily_total_owed')
+        .eq('aggregation_date', dateString);
 
-      if (driversError) throw driversError;
+      if (error) throw error;
 
-      if (!driversFromDB || driversFromDB.length === 0) {
-        setTotalAllowance(0);
-        return;
-      }
-
-      const driverIds = driversFromDB.map(d => d.id);
       const earningsMap = new Map<string, number>();
-
-      const [
-        { data: tripCompletions },
-        { data: rentalTrips },
-        { data: outstationTrips },
-        { data: airportTrips }
-      ] = await Promise.all([
-        supabase
-          .from('trip_completions')
-          .select('driver_id, total_amount_owed')
-          .in('driver_id', driverIds)
-          .gte('completed_at', utcStartOfDay.toISOString())
-          .lte('completed_at', utcEndOfDay.toISOString()),
-        supabase
-          .from('rental_trip_completions')
-          .select('driver_id, total_amount_owed')
-          .in('driver_id', driverIds)
-          .gte('completed_at', utcStartOfDay.toISOString())
-          .lte('completed_at', utcEndOfDay.toISOString()),
-        supabase
-          .from('outstation_trip_completions')
-          .select('driver_id, total_amount_owed')
-          .in('driver_id', driverIds)
-          .gte('completed_at', utcStartOfDay.toISOString())
-          .lte('completed_at', utcEndOfDay.toISOString()),
-        supabase
-          .from('airport_trip_completions')
-          .select('driver_id, total_amount_owed')
-          .in('driver_id', driverIds)
-          .gte('completed_at', utcStartOfDay.toISOString())
-          .lte('completed_at', utcEndOfDay.toISOString())
-      ]);
-
-      const allTrips = [
-        ...(tripCompletions || []),
-        ...(rentalTrips || []),
-        ...(outstationTrips || []),
-        ...(airportTrips || [])
-      ];
-
       let total = 0;
-      allTrips.forEach((trip: any) => {
-        const amount = parseFloat(trip.total_amount_owed || '0');
-        const current = earningsMap.get(trip.driver_id) || 0;
-        earningsMap.set(trip.driver_id, current + amount);
+
+      (dailyAmounts || []).forEach((record) => {
+        const amount = parseFloat(record.daily_total_owed || '0');
+        earningsMap.set(record.driver_name, amount);
         total += amount;
       });
 
       setTotalAllowance(total);
 
       const updatedDrivers = drivers.map(driver => {
-        const dbDriver = driversFromDB?.find(
-          d => d.name.toLowerCase() === driver.name.toLowerCase() ||
-               d.phone_number === driver.phone
-        );
-
-        const driverId = dbDriver?.id || driver.id;
-        const allowance = earningsMap.get(driverId) || 0;
-
-        return {
-          ...driver,
-          id: driverId,
-          allowance
-        };
+        const allowance = earningsMap.get(driver.name) || 0;
+        return { ...driver, allowance };
       });
 
       setDrivers(updatedDrivers);
