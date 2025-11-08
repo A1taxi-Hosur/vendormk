@@ -187,7 +187,7 @@ export default function Dashboard() {
               ₹{calculatedBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
             </Text>
             <Text style={styles.statLabel}>Today's Balance</Text>
-            <Text style={styles.statSubLabel}>Commission - Allowance</Text>
+            <Text style={styles.statSubLabel}>Admin - Driver Commission</Text>
           </TouchableOpacity>
 
           <View style={[styles.statCard, styles.infoCard]}>
@@ -253,7 +253,7 @@ export default function Dashboard() {
               </Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Driver Allowance</Text>
+              <Text style={styles.summaryLabel}>Driver Commission</Text>
               <Text style={styles.summaryValue}>
                 ₹{totalDeducted.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </Text>

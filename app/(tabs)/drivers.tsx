@@ -239,7 +239,7 @@ export default function Drivers() {
 
         {totalAllowance > 0 && (
           <View style={styles.calendarFooter}>
-            <Text style={styles.calendarFooterLabel}>Total Allowance for {selectedDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</Text>
+            <Text style={styles.calendarFooterLabel}>Total Commission for {selectedDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</Text>
             <Text style={styles.calendarFooterAmount}>₹{totalAllowance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
           </View>
         )}
@@ -264,7 +264,7 @@ export default function Drivers() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Driver Management</Text>
-        <Text style={styles.headerSubtitle}>View drivers and daily allowances</Text>
+        <Text style={styles.headerSubtitle}>View drivers and daily commissions</Text>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -323,12 +323,12 @@ export default function Drivers() {
                     <Text style={styles.allowanceAmount}>
                       ₹{driver.allowance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                     </Text>
-                    <Text style={styles.allowanceLabel}>Earned</Text>
+                    <Text style={styles.allowanceLabel}>Commission</Text>
                   </>
                 ) : (
                   <>
                     <Text style={styles.noAllowanceText}>₹0.00</Text>
-                    <Text style={styles.allowanceLabel}>No Earnings</Text>
+                    <Text style={styles.allowanceLabel}>No Commission</Text>
                   </>
                 )}
               </View>
