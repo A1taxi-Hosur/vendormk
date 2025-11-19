@@ -71,16 +71,11 @@ export default function Dashboard() {
       const day = String(today.getDate()).padStart(2, '0');
       const todayString = `${year}-${month}-${day}`;
 
-      const [driversData, vehiclesData, walletData, commissionData, dailyAmountsData] = await Promise.all([
+      const [driversData, vehiclesData, walletData, cumulativeBalanceData] = await Promise.all([
         supabase.from('drivers').select('*').eq('vendor_id', vendor.vendor_id),
         supabase.from('vehicles').select('*').eq('vendor_id', vendor.vendor_id),
         supabase.from('wallets').select('*').eq('vendor_id', vendor.vendor_id).maybeSingle(),
-        supabase.from('commissions')
-          .select('commission_amount')
-          .eq('vendor_id', vendor.vendor_id)
-          .eq('commission_date', todayString)
-          .maybeSingle(),
-        supabase.rpc('get_driver_daily_amounts_for_vendor', {
+        supabase.rpc('get_cumulative_wallet_balance', {
           p_vendor_id: vendor.vendor_id,
           p_date: todayString
         })
@@ -90,18 +85,17 @@ export default function Dashboard() {
       if (vehiclesData.data) setVehicles(vehiclesData.data);
       if (walletData.data) setWallet(walletData.data);
 
-      const allocated = commissionData.data?.commission_amount ? parseFloat(commissionData.data.commission_amount) : 0;
+      const todayData = cumulativeBalanceData.data?.find((d: any) => d.balance_date === todayString);
 
-      let deducted = 0;
-      (dailyAmountsData.data || []).forEach((record: any) => {
-        deducted += parseFloat(record.daily_total_owed || '0');
-      });
-
-      const balance = allocated - deducted;
-
-      setTotalAllocated(allocated);
-      setTotalDeducted(deducted);
-      setCalculatedBalance(balance);
+      if (todayData) {
+        setTotalAllocated(parseFloat(todayData.admin_credit || '0'));
+        setTotalDeducted(parseFloat(todayData.driver_commission || '0'));
+        setCalculatedBalance(parseFloat(todayData.cumulative_balance || '0'));
+      } else {
+        setTotalAllocated(0);
+        setTotalDeducted(0);
+        setCalculatedBalance(0);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

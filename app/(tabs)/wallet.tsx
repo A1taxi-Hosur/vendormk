@@ -43,31 +43,24 @@ export default function WalletScreen() {
     const dateString = `${year}-${month}-${day}`;
 
     try {
-      const [commissionData, dailyAmountsData] = await Promise.all([
-        supabase
-          .from('commissions')
-          .select('commission_amount')
-          .eq('vendor_id', vendor.vendor_id)
-          .eq('commission_date', dateString)
-          .maybeSingle(),
-        supabase.rpc('get_driver_daily_amounts_for_vendor', {
-          p_vendor_id: vendor.vendor_id,
-          p_date: dateString
-        })
-      ]);
-
-      const adminAllocated = commissionData.data?.commission_amount ? parseFloat(commissionData.data.commission_amount) : 0;
-
-      let driverAllowance = 0;
-      (dailyAmountsData.data || []).forEach((record: any) => {
-        driverAllowance += parseFloat(record.daily_total_owed || '0');
+      const { data, error } = await supabase.rpc('get_cumulative_wallet_balance', {
+        p_vendor_id: vendor.vendor_id,
+        p_date: dateString
       });
 
-      const balance = adminAllocated - driverAllowance;
+      if (error) throw error;
 
-      setTotalAllocated(adminAllocated);
-      setCalculatedBalance(balance);
-      setTotalDeducted(driverAllowance);
+      const selectedDayData = data?.find((d: any) => d.balance_date === dateString);
+
+      if (selectedDayData) {
+        setTotalAllocated(parseFloat(selectedDayData.admin_credit || '0'));
+        setTotalDeducted(parseFloat(selectedDayData.driver_commission || '0'));
+        setCalculatedBalance(parseFloat(selectedDayData.cumulative_balance || '0'));
+      } else {
+        setTotalAllocated(0);
+        setTotalDeducted(0);
+        setCalculatedBalance(0);
+      }
     } catch (error) {
       console.error('Error calculating balance:', error);
       setTotalAllocated(0);
