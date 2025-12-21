@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
-import { Search, Phone, CreditCard, Car, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { Search, Phone, CreditCard, Car, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin } from 'lucide-react-native';
 import { supabase, DriverDailyAllowance } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -14,6 +14,16 @@ type DriverWithAllowance = {
   allowance?: number;
 };
 
+type RideDetail = {
+  ride_code: string;
+  fare_amount: number;
+  pickup_address: string;
+  destination_address: string;
+  distance_km: number;
+  created_at: string;
+  booking_type: string;
+};
+
 export default function Drivers() {
   const { vendor } = useAuth();
   const [drivers, setDrivers] = useState<DriverWithAllowance[]>([]);
@@ -21,6 +31,9 @@ export default function Drivers() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [totalAllowance, setTotalAllowance] = useState(0);
+  const [expandedDriver, setExpandedDriver] = useState<string | null>(null);
+  const [driverRides, setDriverRides] = useState<RideDetail[]>([]);
+  const [loadingRides, setLoadingRides] = useState(false);
 
   useEffect(() => {
     if (vendor) {
@@ -128,6 +141,42 @@ export default function Drivers() {
     } catch (error) {
       console.error('Error loading driver allowances:', error);
       setTotalAllowance(0);
+    }
+  };
+
+  const loadDriverRides = async (driverName: string) => {
+    if (!vendor) return;
+
+    setLoadingRides(true);
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+
+    try {
+      const { data, error } = await supabase.rpc('get_driver_rides_by_date', {
+        p_vendor_id: vendor.vendor_id,
+        p_driver_name: driverName,
+        p_date: dateString
+      });
+
+      if (error) throw error;
+      setDriverRides(data || []);
+    } catch (error) {
+      console.error('Error loading driver rides:', error);
+      setDriverRides([]);
+    } finally {
+      setLoadingRides(false);
+    }
+  };
+
+  const toggleDriverExpansion = async (driverName: string) => {
+    if (expandedDriver === driverName) {
+      setExpandedDriver(null);
+      setDriverRides([]);
+    } else {
+      setExpandedDriver(driverName);
+      await loadDriverRides(driverName);
     }
   };
 
@@ -296,45 +345,122 @@ export default function Drivers() {
           <Text style={styles.sectionTitle}>Drivers for {selectedDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Text>
         </View>
 
-        {filteredDrivers.map((driver) => (
-          <View key={driver.id} style={styles.driverCard}>
-            <View style={styles.driverHeader}>
-              <View style={styles.driverInfo}>
-                <Text style={styles.driverName}>{driver.name}</Text>
-                <View style={styles.detailRow}>
-                  <Phone size={14} color="#6B7280" />
-                  <Text style={styles.detailText}>{driver.phone}</Text>
+        {filteredDrivers.map((driver) => {
+          const isExpanded = expandedDriver === driver.name;
+          return (
+            <View key={driver.id} style={styles.driverCard}>
+              <TouchableOpacity
+                onPress={() => toggleDriverExpansion(driver.name)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.driverHeader}>
+                  <View style={styles.driverInfo}>
+                    <View style={styles.driverNameRow}>
+                      <Text style={styles.driverName}>{driver.name}</Text>
+                      {isExpanded ? (
+                        <ChevronUp size={20} color="#DC2626" />
+                      ) : (
+                        <ChevronDown size={20} color="#6B7280" />
+                      )}
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Phone size={14} color="#6B7280" />
+                      <Text style={styles.detailText}>{driver.phone}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <CreditCard size={14} color="#6B7280" />
+                      <Text style={styles.detailText}>{driver.license}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Car size={14} color="#6B7280" />
+                      <Text style={styles.detailText}>
+                        {driver.vehicle}
+                        {driver.vehicleDetails && ` (${driver.vehicleDetails})`}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.allowanceContainer}>
+                    {driver.allowance !== undefined && driver.allowance > 0 ? (
+                      <>
+                        <Text style={styles.allowanceAmount}>
+                          ₹{driver.allowance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </Text>
+                        <Text style={styles.allowanceLabel}>Commission</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.noAllowanceText}>₹0.00</Text>
+                        <Text style={styles.allowanceLabel}>No Commission</Text>
+                      </>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.detailRow}>
-                  <CreditCard size={14} color="#6B7280" />
-                  <Text style={styles.detailText}>{driver.license}</Text>
+              </TouchableOpacity>
+
+              {isExpanded && (
+                <View style={styles.ridesContainer}>
+                  {loadingRides ? (
+                    <View style={styles.loadingRidesContainer}>
+                      <ActivityIndicator size="small" color="#DC2626" />
+                      <Text style={styles.loadingRidesText}>Loading rides...</Text>
+                    </View>
+                  ) : driverRides.length > 0 ? (
+                    <>
+                      <View style={styles.ridesHeader}>
+                        <Text style={styles.ridesHeaderText}>
+                          {driverRides.length} {driverRides.length === 1 ? 'Ride' : 'Rides'} on {selectedDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                        </Text>
+                      </View>
+                      {driverRides.map((ride, index) => (
+                        <View key={ride.ride_code} style={styles.rideItem}>
+                          <View style={styles.rideHeader}>
+                            <Text style={styles.rideCode}>#{ride.ride_code}</Text>
+                            <Text style={styles.rideFare}>
+                              ₹{parseFloat(ride.fare_amount.toString()).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                            </Text>
+                          </View>
+                          <View style={styles.rideDetails}>
+                            <View style={styles.rideDetailRow}>
+                              <MapPin size={12} color="#10B981" />
+                              <Text style={styles.rideDetailText} numberOfLines={1}>
+                                {ride.pickup_address}
+                              </Text>
+                            </View>
+                            <View style={styles.rideDetailRow}>
+                              <MapPin size={12} color="#DC2626" />
+                              <Text style={styles.rideDetailText} numberOfLines={1}>
+                                {ride.destination_address}
+                              </Text>
+                            </View>
+                            <View style={styles.rideMetaRow}>
+                              <Text style={styles.rideMetaText}>
+                                {ride.distance_km ? `${parseFloat(ride.distance_km.toString()).toFixed(1)} km` : 'N/A'}
+                              </Text>
+                              <Text style={styles.rideMetaDivider}>•</Text>
+                              <Text style={styles.rideMetaText}>
+                                {new Date(ride.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                              </Text>
+                              {ride.booking_type && (
+                                <>
+                                  <Text style={styles.rideMetaDivider}>•</Text>
+                                  <Text style={styles.rideMetaText}>{ride.booking_type}</Text>
+                                </>
+                              )}
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                    </>
+                  ) : (
+                    <View style={styles.noRidesContainer}>
+                      <Text style={styles.noRidesText}>No rides found for this date</Text>
+                    </View>
+                  )}
                 </View>
-                <View style={styles.detailRow}>
-                  <Car size={14} color="#6B7280" />
-                  <Text style={styles.detailText}>
-                    {driver.vehicle}
-                    {driver.vehicleDetails && ` (${driver.vehicleDetails})`}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.allowanceContainer}>
-                {driver.allowance !== undefined && driver.allowance > 0 ? (
-                  <>
-                    <Text style={styles.allowanceAmount}>
-                      ₹{driver.allowance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                    </Text>
-                    <Text style={styles.allowanceLabel}>Commission</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.noAllowanceText}>₹0.00</Text>
-                    <Text style={styles.allowanceLabel}>No Commission</Text>
-                  </>
-                )}
-              </View>
+              )}
             </View>
-          </View>
-        ))}
+          );
+        })}
 
         {filteredDrivers.length === 0 && (
           <View style={styles.emptyState}>
@@ -538,11 +664,16 @@ const styles = StyleSheet.create({
   driverInfo: {
     flex: 1,
   },
+  driverNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   driverName: {
     fontSize: 18,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 8,
   },
   detailRow: {
     flexDirection: 'row',
@@ -590,5 +721,87 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginTop: 8,
+  },
+  ridesContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  loadingRidesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingRidesText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  ridesHeader: {
+    marginBottom: 12,
+  },
+  ridesHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  rideItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  rideHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  rideCode: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  rideFare: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  rideDetails: {
+    gap: 6,
+  },
+  rideDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  rideDetailText: {
+    fontSize: 13,
+    color: '#6B7280',
+    flex: 1,
+  },
+  rideMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  rideMetaText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  rideMetaDivider: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginHorizontal: 6,
+  },
+  noRidesContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  noRidesText: {
+    fontSize: 14,
+    color: '#6B7280',
   },
 });
