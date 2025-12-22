@@ -24,10 +24,15 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const zohoApiKey = Deno.env.get('ZOHO_PAYMENTS_API_KEY');
+    const zohoSigningKey = Deno.env.get('ZOHO_PAYMENTS_SIGNING_KEY');
 
-    const TEST_MODE = true;
+    const TEST_MODE = !zohoApiKey || !zohoSigningKey || zohoApiKey.trim() === '' || zohoSigningKey.trim() === '';
 
-    console.log('FORCED TEST_MODE: Payment system running in test mode');
+    console.log('Payment mode:', TEST_MODE ? 'TEST' : 'PRODUCTION (Zoho)');
+    if (!TEST_MODE) {
+      console.log('Using Zoho Payments API');
+    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -105,7 +110,86 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    throw new Error('Production Zoho payment mode not yet configured');
+    const callbackUrl = `${supabaseUrl}/functions/v1/zoho-payment-webhook`;
+
+    const paymentData = {
+      amount: amount * 100,
+      currency: 'INR',
+      receipt: paymentId,
+      callback_url: callbackUrl,
+      notes: {
+        vendor_id: vendor_id,
+        description: description,
+      },
+    };
+
+    const timestamp = Date.now().toString();
+    const signature = await generateSignature(
+      JSON.stringify(paymentData) + timestamp,
+      zohoSigningKey!
+    );
+
+    console.log('Creating Zoho payment with amount:', paymentData.amount);
+
+    const zohoResponse = await fetch('https://payments.zoho.in/api/v1/payment/create', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Zoho-oauthtoken ${zohoApiKey}`,
+        'Content-Type': 'application/json',
+        'X-Zoho-Signature': signature,
+        'X-Zoho-Timestamp': timestamp,
+      },
+      body: JSON.stringify(paymentData),
+    });
+
+    const responseText = await zohoResponse.text();
+    console.log('Zoho response status:', zohoResponse.status);
+    console.log('Zoho response:', responseText);
+
+    if (!zohoResponse.ok) {
+      console.error('Zoho API Error:', responseText);
+      throw new Error(`Zoho payment creation failed: ${responseText}`);
+    }
+
+    const zohoData = JSON.parse(responseText);
+
+    const { data: paymentTransaction, error: insertError } = await supabase
+      .from('payment_transactions')
+      .insert({
+        id: paymentId,
+        vendor_id: vendor_id,
+        amount: amount,
+        currency: 'INR',
+        payment_gateway: 'zoho',
+        gateway_transaction_id: zohoData.payment_id || zohoData.id,
+        gateway_payment_id: zohoData.payment_id || zohoData.id,
+        status: 'pending',
+        payment_url: zohoData.payment_url || zohoData.url,
+        description: description,
+        metadata: zohoData,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Database insert error:', insertError);
+      throw new Error('Failed to create payment transaction record');
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        payment_id: paymentId,
+        payment_url: zohoData.payment_url || zohoData.url,
+        gateway_payment_id: zohoData.payment_id || zohoData.id,
+      }),
+      {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
   } catch (error: any) {
     console.error('Error in initiate-zoho-payment:', error);
     return new Response(
@@ -123,3 +207,22 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+async function generateSignature(data: string, key: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const messageData = encoder.encode(data);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+  const hashArray = Array.from(new Uint8Array(signature));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
