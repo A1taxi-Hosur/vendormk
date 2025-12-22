@@ -145,6 +145,9 @@ export default function WalletScreen() {
       const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
       const apiUrl = `${supabaseUrl}/functions/v1/initiate-zoho-payment`;
 
+      console.log('Initiating payment with vendor_id:', vendor.vendor_id);
+      console.log('API URL:', apiUrl);
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -157,7 +160,9 @@ export default function WalletScreen() {
         }),
       });
 
+      console.log('Response status:', response.status);
       const result = await response.json();
+      console.log('Response data:', result);
 
       if (!result.success) {
         throw new Error(result.error || 'Payment initiation failed');
