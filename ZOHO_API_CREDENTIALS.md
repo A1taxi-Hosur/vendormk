@@ -1,11 +1,16 @@
 # Zoho Payments API Credentials Guide
 
+⚠️ **IMPORTANT: This guide is outdated. Please see [ZOHO_OAUTH_SETUP_GUIDE.md](./ZOHO_OAUTH_SETUP_GUIDE.md) for the correct OAuth setup.**
+
 ## Required Credentials
 
-You need **2 credentials** from Zoho Payments:
+Zoho Payments API requires **OAuth 2.0 authentication**, not simple API keys.
 
-1. **API Key** (also called Auth Token or OAuth Token)
-2. **Signing Key** (also called Secret Key or Webhook Secret)
+You need **3 OAuth credentials**:
+
+1. **Client ID** - From Zoho API Console
+2. **Client Secret** - From Zoho API Console
+3. **Refresh Token** - Generated via OAuth flow
 
 ## How to Get Your Credentials
 

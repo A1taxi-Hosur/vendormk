@@ -24,14 +24,16 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const zohoApiKey = Deno.env.get('ZOHO_PAYMENTS_API_KEY');
-    const zohoSigningKey = Deno.env.get('ZOHO_PAYMENTS_SIGNING_KEY');
+    const zohoClientId = Deno.env.get('ZOHO_CLIENT_ID');
+    const zohoClientSecret = Deno.env.get('ZOHO_CLIENT_SECRET');
+    const zohoRefreshToken = Deno.env.get('ZOHO_REFRESH_TOKEN');
 
-    const TEST_MODE = !zohoApiKey || !zohoSigningKey || zohoApiKey.trim() === '' || zohoSigningKey.trim() === '';
+    const TEST_MODE = !zohoClientId || !zohoClientSecret || !zohoRefreshToken ||
+                      zohoClientId.trim() === '' || zohoClientSecret.trim() === '' || zohoRefreshToken.trim() === '';
 
     console.log('Payment mode:', TEST_MODE ? 'TEST' : 'PRODUCTION (Zoho)');
     if (!TEST_MODE) {
-      console.log('Using Zoho Payments API');
+      console.log('Using Zoho Payments API with OAuth');
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -110,6 +112,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log('Getting Zoho access token...');
+    const accessToken = await getZohoAccessToken(zohoClientId!, zohoClientSecret!, zohoRefreshToken!);
+
+    if (!accessToken) {
+      throw new Error('Failed to obtain Zoho access token');
+    }
+
+    console.log('Access token obtained successfully');
+
     const callbackUrl = `${supabaseUrl}/functions/v1/zoho-payment-webhook`;
 
     const paymentData = {
@@ -123,21 +134,12 @@ Deno.serve(async (req: Request) => {
       },
     };
 
-    const timestamp = Date.now().toString();
-    const signature = await generateSignature(
-      JSON.stringify(paymentData) + timestamp,
-      zohoSigningKey!
-    );
-
     console.log('Creating Zoho payment with amount:', paymentData.amount);
 
-    const zohoResponse = await fetch('https://payments.zoho.in/api/v1/payment/create', {
-      method: 'POST',
+    const zohoResponse = await fetch('https://payments.zoho.in/api/v1/payment/create', {      method: 'POST',
       headers: {
-        'Authorization': `Zoho-oauthtoken ${zohoApiKey}`,
+        'Authorization': `Zoho-oauthtoken ${accessToken}`,
         'Content-Type': 'application/json',
-        'X-Zoho-Signature': signature,
-        'X-Zoho-Timestamp': timestamp,
       },
       body: JSON.stringify(paymentData),
     });
@@ -208,21 +210,37 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-async function generateSignature(data: string, key: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(key);
-  const messageData = encoder.encode(data);
+async function getZohoAccessToken(
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string
+): Promise<string | null> {
+  try {
+    const params = new URLSearchParams({
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+    });
 
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
+    const response = await fetch('https://accounts.zoho.in/oauth/v2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
 
-  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-  const hashArray = Array.from(new Uint8Array(signature));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex;
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to refresh Zoho access token:', errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  } catch (error) {
+    console.error('Error refreshing Zoho access token:', error);
+    return null;
+  }
 }
