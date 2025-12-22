@@ -172,7 +172,22 @@ export default function WalletScreen() {
       setCreditAmount('');
       setDescription('');
 
-      if (result.payment_url) {
+      if (result.test_mode) {
+        Alert.alert(
+          'Payment Successful',
+          `Test payment of ₹${parseFloat(creditAmount).toLocaleString('en-IN')} completed successfully. Your wallet has been credited.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                loadWallet();
+                loadTransactions();
+                calculateBalanceForDate(selectedDate);
+              },
+            },
+          ]
+        );
+      } else if (result.payment_url) {
         const supported = await Linking.canOpenURL(result.payment_url);
         if (supported) {
           await Linking.openURL(result.payment_url);
