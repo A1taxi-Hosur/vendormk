@@ -145,19 +145,13 @@ export default function WalletScreen() {
       const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
       const apiUrl = `${supabaseUrl}/functions/v1/initiate-zoho-payment`;
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        Alert.alert('Error', 'Please login again');
-        return;
-      }
-
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${sessionData.session.access_token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          vendor_id: vendor.vendor_id,
           amount: parseFloat(creditAmount),
           description: description,
         }),

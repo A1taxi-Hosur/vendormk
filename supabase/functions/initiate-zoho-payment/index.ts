@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 interface PaymentRequest {
+  vendor_id: string;
   amount: number;
   description: string;
 }
@@ -26,36 +27,26 @@ Deno.serve(async (req: Request) => {
     const zohoApiKey = Deno.env.get('ZOHO_PAYMENTS_API_KEY')!;
     const zohoSigningKey = Deno.env.get('ZOHO_PAYMENTS_SIGNING_KEY')!;
 
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { vendor_id, amount, description }: PaymentRequest = await req.json();
+
+    if (!vendor_id) {
+      throw new Error('Vendor ID is required');
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    });
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      throw new Error('Unauthorized');
-    }
-
-    const { data: vendorCred } = await supabase
-      .from('vendor_credentials')
-      .select('vendor_id')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (!vendorCred) {
-      throw new Error('Vendor not found');
-    }
-
-    const { amount, description }: PaymentRequest = await req.json();
 
     if (!amount || amount <= 0) {
       throw new Error('Invalid amount');
+    }
+
+    const { data: vendor, error: vendorError } = await supabase
+      .from('vendors')
+      .select('id')
+      .eq('id', vendor_id)
+      .maybeSingle();
+
+    if (vendorError || !vendor) {
+      throw new Error('Vendor not found');
     }
 
     const paymentId = crypto.randomUUID();
@@ -66,7 +57,7 @@ Deno.serve(async (req: Request) => {
       currency: 'INR',
       receipt: paymentId,
       notes: {
-        vendor_id: vendorCred.vendor_id,
+        vendor_id: vendor_id,
         description: description,
       },
     };
@@ -100,7 +91,7 @@ Deno.serve(async (req: Request) => {
       .from('payment_transactions')
       .insert({
         id: paymentId,
-        vendor_id: vendorCred.vendor_id,
+        vendor_id: vendor_id,
         amount: amount,
         currency: 'INR',
         payment_gateway: 'zoho',
