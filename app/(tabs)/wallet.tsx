@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, Linking } from 'react-native';
 import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react-native';
 import { supabase, Wallet as WalletType, WalletTransaction, Commission } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import Constants from 'expo-constants';
 
 export default function WalletScreen() {
   const { vendor } = useAuth();
@@ -141,27 +142,62 @@ export default function WalletScreen() {
     }
 
     try {
-      const { error } = await supabase
-        .from('wallet_transactions')
-        .insert({
-          wallet_id: wallet.id,
-          vendor_id: vendor.vendor_id,
-          transaction_type: 'credit',
+      const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const apiUrl = `${supabaseUrl}/functions/v1/initiate-zoho-payment`;
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        Alert.alert('Error', 'Please login again');
+        return;
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionData.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           amount: parseFloat(creditAmount),
           description: description,
-          transaction_date: new Date().toISOString().split('T')[0],
-        });
+        }),
+      });
 
-      if (error) throw error;
+      const result = await response.json();
 
-      Alert.alert('Success', 'Credit added successfully');
+      if (!result.success) {
+        throw new Error(result.error || 'Payment initiation failed');
+      }
+
       setModalVisible(false);
       setCreditAmount('');
       setDescription('');
-      await loadWallet();
-      await loadTransactions();
+
+      if (result.payment_url) {
+        const supported = await Linking.canOpenURL(result.payment_url);
+        if (supported) {
+          await Linking.openURL(result.payment_url);
+          Alert.alert(
+            'Payment Initiated',
+            'Please complete the payment in your browser. Your wallet will be credited automatically after successful payment.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  loadWallet();
+                  loadTransactions();
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert('Error', 'Cannot open payment URL');
+        }
+      } else {
+        Alert.alert('Error', 'Payment URL not received from gateway');
+      }
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      Alert.alert('Error', error.message || 'Payment initiation failed');
     }
   };
 

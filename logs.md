@@ -1715,3 +1715,30 @@
 11-06 18:00:46.096  5354  8039 I dwbx    : (REDACTED) appOpsListener %s %s
 11-06 18:00:46.096  5354  8039 I dwbx    : (REDACTED) Ignoring irrelevant audio permission changes for package %s
 11-06 18:00:48.878 16065 16065 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.libs.gmscorelogger.service.START dat=chimera-action:/... cmp=com.google.android.gms/.chimera.PersistentDirectBootAwareApiService }
+
+
+## Zoho Payments Integration - 2025-12-22
+
+### Changes Made
+1. **Environment Variables**: Added ZOHO_PAYMENTS_API_KEY and ZOHO_PAYMENTS_SIGNING_KEY to .env
+2. **Database Migration**: Created payment_transactions table to track Zoho payment status
+3. **Edge Functions**:
+   - initiate-zoho-payment: Creates payment links and initiates transactions
+   - zoho-payment-webhook: Handles payment confirmations and updates wallet
+4. **Wallet Screen**: Updated to redirect to Zoho payment gateway instead of manual credit entry
+5. **Documentation**: Created ZOHO_PAYMENTS_SETUP.md with setup and troubleshooting guide
+
+### Features
+- Vendors can now add credit via Zoho Payments gateway
+- Supports bank transfer, UPI, cards through Zoho
+- Automatic wallet credit after successful payment
+- Payment status tracking in database
+- Secure webhook verification with HMAC SHA-256
+
+### Security
+- API keys stored in environment variables
+- Webhook signature verification
+- Row Level Security on payment_transactions table
+- JWT authentication for payment initiation
+
+
