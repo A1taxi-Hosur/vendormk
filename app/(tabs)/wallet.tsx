@@ -162,7 +162,7 @@ export default function WalletScreen() {
 
       console.log('Response status:', response.status);
       const result = await response.json();
-      console.log('Response data:', result);
+      console.log('Response data:', JSON.stringify(result, null, 2));
 
       if (!result.success) {
         throw new Error(result.error || 'Payment initiation failed');
@@ -211,6 +211,8 @@ export default function WalletScreen() {
         Alert.alert('Error', 'Payment URL not received from gateway');
       }
     } catch (error: any) {
+      console.error('Payment initiation error:', error);
+      console.error('Error message:', error.message);
       Alert.alert('Error', error.message || 'Payment initiation failed');
     }
   };
