@@ -136,7 +136,8 @@ Deno.serve(async (req: Request) => {
 
     console.log('Creating Zoho payment with amount:', paymentData.amount);
 
-    const zohoResponse = await fetch('https://payments.zoho.in/api/v1/payment/create', {      method: 'POST',
+    const zohoResponse = await fetch('https://payments.zoho.in/api/v1/payment/create', {
+      method: 'POST',
       headers: {
         'Authorization': `Zoho-oauthtoken ${accessToken}`,
         'Content-Type': 'application/json',

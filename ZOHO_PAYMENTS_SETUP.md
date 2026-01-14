@@ -5,14 +5,17 @@ This app now integrates with Zoho Payments to allow vendors to add credit to the
 
 ## Setup Instructions
 
-### 1. Configure Environment Variables
+### 1. Configure OAuth Credentials
 
-Replace the placeholder values in `.env` with your actual Zoho Payments credentials:
+⚠️ **IMPORTANT**: Zoho Payments requires OAuth 2.0 authentication. Follow the detailed guide in [ZOHO_OAUTH_SETUP_GUIDE.md](./ZOHO_OAUTH_SETUP_GUIDE.md) to:
 
-```
-ZOHO_PAYMENTS_API_KEY=your_actual_zoho_api_key
-ZOHO_PAYMENTS_SIGNING_KEY=your_actual_zoho_signing_key
-```
+1. Register a Self Client in Zoho API Console
+2. Generate authorization code with required scopes
+3. Exchange it for a refresh token
+4. Configure Supabase secrets:
+   - `ZOHO_CLIENT_ID`
+   - `ZOHO_CLIENT_SECRET`
+   - `ZOHO_REFRESH_TOKEN`
 
 ### 2. Configure Webhook in Zoho Dashboard
 
