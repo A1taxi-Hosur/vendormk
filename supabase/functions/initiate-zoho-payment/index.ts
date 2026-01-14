@@ -113,13 +113,16 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('Getting Zoho access token...');
+    console.log('Client ID:', zohoClientId?.substring(0, 10) + '...');
+    console.log('Refresh Token:', zohoRefreshToken?.substring(0, 10) + '...');
+
     const accessToken = await getZohoAccessToken(zohoClientId!, zohoClientSecret!, zohoRefreshToken!);
 
     if (!accessToken) {
-      throw new Error('Failed to obtain Zoho access token');
+      throw new Error('Failed to obtain Zoho access token - check your OAuth credentials');
     }
 
-    console.log('Access token obtained successfully');
+    console.log('Access token obtained successfully:', accessToken.substring(0, 20) + '...');
 
     const callbackUrl = `${supabaseUrl}/functions/v1/zoho-payment-webhook`;
 
@@ -217,6 +220,8 @@ async function getZohoAccessToken(
   refreshToken: string
 ): Promise<string | null> {
   try {
+    console.log('Refreshing Zoho access token...');
+
     const params = new URLSearchParams({
       refresh_token: refreshToken,
       client_id: clientId,
@@ -232,13 +237,17 @@ async function getZohoAccessToken(
       body: params.toString(),
     });
 
+    console.log('Token refresh response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Failed to refresh Zoho access token:', errorText);
+      console.error('Failed to refresh Zoho access token. Status:', response.status);
+      console.error('Error response:', errorText);
       return null;
     }
 
     const data = await response.json();
+    console.log('Token refresh successful');
     return data.access_token;
   } catch (error) {
     console.error('Error refreshing Zoho access token:', error);
