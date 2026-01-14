@@ -20,9 +20,9 @@ Save these credentials somewhere safe.
 
 1. Still in the API Console, find your newly created Self Client
 2. Click on the **"Generate Code"** button
-3. In the **Scope** field, enter the required Zoho Payments scopes:
+3. In the **Scope** field, enter the required Zoho Payments scopes for Payment Links:
    ```
-   ZohoPayments.payments.CREATE,ZohoPayments.payments.READ
+   ZohoPay.payments.CREATE,ZohoPay.payments.READ,ZohoPay.payments.UPDATE
    ```
 4. Set the **Time Duration** (the authorization code expires in 3 minutes by default)
 5. Click **"Generate"**
@@ -94,17 +94,18 @@ Now you need to add all the OAuth credentials and Account ID:
 
 The system will now:
 1. Use your refresh token to get a fresh access token
-2. Create a payment with Zoho Payments API
-3. Open the Zoho payment page
-4. Process the payment
-5. Credit your wallet via webhook
+2. Create a payment link using Zoho Payments API
+3. Open the payment link in your browser
+4. You complete the payment on Zoho's secure payment page
+5. Your wallet is automatically credited after successful payment (via webhook)
 
 ## Important Notes
 
+- **Payment Links API**: This app uses Zoho Payment Links (not Payment Sessions) which generates direct URLs that work in mobile apps
 - **Refresh Token**: This token is permanent and doesn't expire. Keep it secure!
 - **Access Token**: Generated automatically each time a payment is initiated (expires in 1 hour)
 - **Account ID**: Your Zoho Payments Account ID is required for all API calls
-- **Scopes**: Make sure you include the correct Zoho Payments scopes when generating the authorization code
+- **Scopes**: Make sure you include the correct ZohoPay scopes (CREATE, READ, UPDATE) when generating the authorization code
 - **Self Client**: Only Self Client applications work with Zoho Payments API
 
 ## Troubleshooting
@@ -116,7 +117,8 @@ The system will now:
 - Ensure the Account ID matches your Zoho Payments account
 
 ### "Invalid Scope" Error
-- Ensure you included `ZohoPayments.payments.CREATE,ZohoPayments.payments.READ` in the scope when generating the authorization code
+- Ensure you included `ZohoPay.payments.CREATE,ZohoPay.payments.READ,ZohoPay.payments.UPDATE` in the scope when generating the authorization code
+- Note: We use **Payment Links API** which requires ZohoPay scopes (not ZohoPayments)
 
 ### "Invalid Grant" Error
 - The authorization code expired (they expire in 3 minutes)

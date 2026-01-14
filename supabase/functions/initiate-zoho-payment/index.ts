@@ -131,16 +131,14 @@ Deno.serve(async (req: Request) => {
       amount: amount,
       currency: 'INR',
       description: description,
-      reference_number: paymentId,
-      meta_data: [
-        { key: 'vendor_id', value: vendor_id },
-        { key: 'payment_id', value: paymentId },
-      ],
+      reference_id: paymentId,
+      email: 'vendor@payment.com',
+      notify_user: false,
     };
 
-    console.log('Creating Zoho payment session with amount:', paymentData.amount);
+    console.log('Creating Zoho payment link with amount:', paymentData.amount);
 
-    const zohoResponse = await fetch(`https://payments.zoho.in/api/v1/paymentsessions?account_id=${zohoAccountId}`, {
+    const zohoResponse = await fetch(`https://payments.zoho.in/api/v1/paymentlinks?account_id=${zohoAccountId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Zoho-oauthtoken ${accessToken}`,
@@ -165,10 +163,10 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Zoho API returned error: ${zohoData.message || 'Unknown error'}`);
     }
 
-    const paymentSession = zohoData.payments_session;
-    const paymentUrl = `https://payments.zoho.in/checkout/${paymentSession.payments_session_id}?account_id=${zohoAccountId}`;
+    const paymentLink = zohoData.payment_links;
+    const paymentUrl = paymentLink.url;
 
-    console.log('Payment session created:', paymentSession.payments_session_id);
+    console.log('Payment link created:', paymentLink.payment_link_id);
     console.log('Payment URL:', paymentUrl);
 
     const { data: paymentTransaction, error: insertError } = await supabase
@@ -179,8 +177,8 @@ Deno.serve(async (req: Request) => {
         amount: amount,
         currency: 'INR',
         payment_gateway: 'zoho',
-        gateway_transaction_id: paymentSession.payments_session_id,
-        gateway_payment_id: paymentSession.payments_session_id,
+        gateway_transaction_id: paymentLink.payment_link_id,
+        gateway_payment_id: paymentLink.payment_link_id,
         status: 'pending',
         payment_url: paymentUrl,
         description: description,
@@ -199,7 +197,7 @@ Deno.serve(async (req: Request) => {
         success: true,
         payment_id: paymentId,
         payment_url: paymentUrl,
-        gateway_payment_id: paymentSession.payments_session_id,
+        gateway_payment_id: paymentLink.payment_link_id,
       }),
       {
         headers: {
