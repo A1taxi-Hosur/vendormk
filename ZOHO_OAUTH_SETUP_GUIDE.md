@@ -62,26 +62,30 @@ You'll receive a JSON response like:
 
 **Important**: Save the `refresh_token` - this is permanent and will be used to generate new access tokens.
 
-## Step 4: Configure Supabase Secrets
+## Step 4: Get Your Zoho Account ID
 
-Now you need to remove the old secrets and add the correct OAuth credentials:
+1. Log in to [Zoho Payments](https://payments.zoho.in/)
+2. Go to **Settings** → **Developer Space**
+3. You'll see your **Account ID** displayed on this page
+4. Copy this Account ID - you'll need it in the next step
+
+## Step 5: Configure Supabase Secrets
+
+Now you need to add all the OAuth credentials and Account ID:
 
 1. Go to your [Supabase Dashboard](https://supabase.com/dashboard)
 2. Select your project
 3. Navigate to **Settings** → **Edge Functions** → **Secrets**
-4. **Delete the old secrets**:
-   - Remove `ZOHO_PAYMENTS_API_KEY`
-   - Remove `ZOHO_PAYMENTS_SIGNING_KEY`
-
-5. **Add three new secrets**:
+4. **Add four secrets**:
 
    | Secret Name | Value |
    |------------|-------|
    | `ZOHO_CLIENT_ID` | Your Client ID from Step 1 |
    | `ZOHO_CLIENT_SECRET` | Your Client Secret from Step 1 |
    | `ZOHO_REFRESH_TOKEN` | Your Refresh Token from Step 3 |
+   | `ZOHO_ACCOUNT_ID` | Your Account ID from Step 4 |
 
-## Step 5: Test the Integration
+## Step 6: Test the Integration
 
 1. Go back to your app's Wallet tab
 2. Click **"Add Credit"**
@@ -99,6 +103,7 @@ The system will now:
 
 - **Refresh Token**: This token is permanent and doesn't expire. Keep it secure!
 - **Access Token**: Generated automatically each time a payment is initiated (expires in 1 hour)
+- **Account ID**: Your Zoho Payments Account ID is required for all API calls
 - **Scopes**: Make sure you include the correct Zoho Payments scopes when generating the authorization code
 - **Self Client**: Only Self Client applications work with Zoho Payments API
 
@@ -107,7 +112,8 @@ The system will now:
 ### "Not Authorised" Error
 - Make sure you're using OAuth credentials (Client ID, Client Secret, Refresh Token), not API keys
 - Verify that the refresh token was generated with the correct scopes
-- Check that all three secrets are properly set in Supabase
+- Check that all four secrets are properly set in Supabase (including ZOHO_ACCOUNT_ID)
+- Ensure the Account ID matches your Zoho Payments account
 
 ### "Invalid Scope" Error
 - Ensure you included `ZohoPayments.payments.CREATE,ZohoPayments.payments.READ` in the scope when generating the authorization code

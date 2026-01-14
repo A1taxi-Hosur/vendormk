@@ -27,9 +27,11 @@ Deno.serve(async (req: Request) => {
     const zohoClientId = Deno.env.get('ZOHO_CLIENT_ID');
     const zohoClientSecret = Deno.env.get('ZOHO_CLIENT_SECRET');
     const zohoRefreshToken = Deno.env.get('ZOHO_REFRESH_TOKEN');
+    const zohoAccountId = Deno.env.get('ZOHO_ACCOUNT_ID');
 
-    const TEST_MODE = !zohoClientId || !zohoClientSecret || !zohoRefreshToken ||
-                      zohoClientId.trim() === '' || zohoClientSecret.trim() === '' || zohoRefreshToken.trim() === '';
+    const TEST_MODE = !zohoClientId || !zohoClientSecret || !zohoRefreshToken || !zohoAccountId ||
+                      zohoClientId.trim() === '' || zohoClientSecret.trim() === '' ||
+                      zohoRefreshToken.trim() === '' || zohoAccountId.trim() === '';
 
     console.log('Payment mode:', TEST_MODE ? 'TEST' : 'PRODUCTION (Zoho)');
     if (!TEST_MODE) {
@@ -115,6 +117,7 @@ Deno.serve(async (req: Request) => {
     console.log('Getting Zoho access token...');
     console.log('Client ID:', zohoClientId?.substring(0, 10) + '...');
     console.log('Refresh Token:', zohoRefreshToken?.substring(0, 10) + '...');
+    console.log('Account ID:', zohoAccountId);
 
     const accessToken = await getZohoAccessToken(zohoClientId!, zohoClientSecret!, zohoRefreshToken!);
 
@@ -124,22 +127,20 @@ Deno.serve(async (req: Request) => {
 
     console.log('Access token obtained successfully:', accessToken.substring(0, 20) + '...');
 
-    const callbackUrl = `${supabaseUrl}/functions/v1/zoho-payment-webhook`;
-
     const paymentData = {
-      amount: amount * 100,
+      amount: amount,
       currency: 'INR',
-      receipt: paymentId,
-      callback_url: callbackUrl,
-      notes: {
-        vendor_id: vendor_id,
-        description: description,
-      },
+      description: description,
+      reference_number: paymentId,
+      meta_data: [
+        { key: 'vendor_id', value: vendor_id },
+        { key: 'payment_id', value: paymentId },
+      ],
     };
 
-    console.log('Creating Zoho payment with amount:', paymentData.amount);
+    console.log('Creating Zoho payment session with amount:', paymentData.amount);
 
-    const zohoResponse = await fetch('https://payments.zoho.in/api/v1/payment/create', {
+    const zohoResponse = await fetch(`https://payments.zoho.in/api/v1/paymentsessions?account_id=${zohoAccountId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Zoho-oauthtoken ${accessToken}`,
@@ -158,6 +159,17 @@ Deno.serve(async (req: Request) => {
     }
 
     const zohoData = JSON.parse(responseText);
+    console.log('Zoho API response code:', zohoData.code);
+
+    if (zohoData.code !== 0) {
+      throw new Error(`Zoho API returned error: ${zohoData.message || 'Unknown error'}`);
+    }
+
+    const paymentSession = zohoData.payments_session;
+    const paymentUrl = `https://payments.zoho.in/checkout/${paymentSession.payments_session_id}?account_id=${zohoAccountId}`;
+
+    console.log('Payment session created:', paymentSession.payments_session_id);
+    console.log('Payment URL:', paymentUrl);
 
     const { data: paymentTransaction, error: insertError } = await supabase
       .from('payment_transactions')
@@ -167,10 +179,10 @@ Deno.serve(async (req: Request) => {
         amount: amount,
         currency: 'INR',
         payment_gateway: 'zoho',
-        gateway_transaction_id: zohoData.payment_id || zohoData.id,
-        gateway_payment_id: zohoData.payment_id || zohoData.id,
+        gateway_transaction_id: paymentSession.payments_session_id,
+        gateway_payment_id: paymentSession.payments_session_id,
         status: 'pending',
-        payment_url: zohoData.payment_url || zohoData.url,
+        payment_url: paymentUrl,
         description: description,
         metadata: zohoData,
       })
@@ -186,8 +198,8 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         payment_id: paymentId,
-        payment_url: zohoData.payment_url || zohoData.url,
-        gateway_payment_id: zohoData.payment_id || zohoData.id,
+        payment_url: paymentUrl,
+        gateway_payment_id: paymentSession.payments_session_id,
       }),
       {
         headers: {
