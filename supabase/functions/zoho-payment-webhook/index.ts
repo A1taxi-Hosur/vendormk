@@ -18,14 +18,21 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const zohoSigningKey = Deno.env.get('ZOHO_PAYMENTS_SIGNING_KEY')!;
+    const zohoSigningKey = Deno.env.get('ZOHO_PAYMENTS_SIGNING_KEY') || '';
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const requestBody = await req.text();
     const zohoSignature = req.headers.get('X-Zoho-Signature');
 
-    if (zohoSignature) {
+    console.log('=== WEBHOOK RECEIVED ===');
+    console.log('Method:', req.method);
+    console.log('URL:', req.url);
+    console.log('Headers:', Object.fromEntries(req.headers.entries()));
+    console.log('Body:', requestBody);
+    console.log('======================');
+
+    if (zohoSignature && zohoSigningKey) {
       const isValid = await verifySignature(requestBody, zohoSignature, zohoSigningKey);
       if (!isValid) {
         console.error('Invalid signature');
@@ -34,10 +41,12 @@ Deno.serve(async (req: Request) => {
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+    } else {
+      console.warn('Signature verification skipped - no signing key or signature provided');
     }
 
     const webhookData = JSON.parse(requestBody);
-    console.log('Zoho webhook received:', webhookData);
+    console.log('Zoho webhook received:', JSON.stringify(webhookData, null, 2));
 
     const gatewayPaymentId = webhookData.payment?.payment_id || webhookData.payment_id || webhookData.payment?.id || webhookData.id;
     const referenceId = webhookData.payment?.reference_id || webhookData.reference_id;
