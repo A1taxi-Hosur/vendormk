@@ -17,6 +17,7 @@ type DriverWithAllowance = {
 type RideDetail = {
   ride_code: string;
   fare_amount: number;
+  commission_amount: number;
   pickup_address: string;
   destination_address: string;
   distance_km: number;
@@ -416,7 +417,7 @@ export default function Drivers() {
                           <View style={styles.rideHeader}>
                             <Text style={styles.rideCode}>#{ride.ride_code}</Text>
                             <Text style={styles.rideFare}>
-                              ₹{parseFloat(ride.fare_amount.toString()).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                              ₹{parseFloat(ride.commission_amount.toString()).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                             </Text>
                           </View>
                           <View style={styles.rideDetails}>
