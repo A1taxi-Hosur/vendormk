@@ -126,20 +126,24 @@ export default function WalletScreen() {
   };
 
   const handleAddCredit = async () => {
+    console.log('handleAddCredit called');
+    console.log('creditAmount:', creditAmount);
+    console.log('description:', description);
+
     if (!vendor || !wallet) {
+      console.error('Wallet not initialized');
       Alert.alert('Error', 'Wallet not initialized');
       return;
     }
 
     if (!creditAmount || parseFloat(creditAmount) <= 0) {
+      console.error('Invalid amount:', creditAmount);
       Alert.alert('Error', 'Please enter a valid amount');
       return;
     }
 
-    if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a description');
-      return;
-    }
+    const finalDescription = description.trim() || `Admin daily credit - ₹${parseFloat(creditAmount).toLocaleString('en-IN')}`;
+    console.log('Final description:', finalDescription);
 
     try {
       const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -156,7 +160,7 @@ export default function WalletScreen() {
         body: JSON.stringify({
           vendor_id: vendor.vendor_id,
           amount: parseFloat(creditAmount),
-          description: description,
+          description: finalDescription,
         }),
       });
 
@@ -545,10 +549,10 @@ export default function WalletScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Description *</Text>
+                <Text style={styles.label}>Description (optional)</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
-                  placeholder="e.g., Admin daily credit"
+                  placeholder="e.g., Admin daily credit (auto-filled if empty)"
                   multiline
                   numberOfLines={3}
                   value={description}
