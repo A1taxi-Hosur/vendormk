@@ -48,12 +48,22 @@ Deno.serve(async (req: Request) => {
     const webhookData = JSON.parse(requestBody);
     console.log('Zoho webhook received:', JSON.stringify(webhookData, null, 2));
 
-    const gatewayPaymentId = webhookData.payment?.payment_id || webhookData.payment_id || webhookData.payment?.id || webhookData.id;
-    const referenceId = webhookData.payment?.reference_id || webhookData.reference_id;
-    const paymentStatus = webhookData.payment?.status || webhookData.status;
-    const amount = webhookData.payment?.amount || webhookData.amount;
+    const eventObject = webhookData.event_object;
+    const payment = eventObject?.payment || webhookData.payment;
+    const eventType = webhookData.event_type;
 
-    console.log('Webhook data - Payment ID:', gatewayPaymentId, 'Reference ID:', referenceId, 'Status:', paymentStatus);
+    const gatewayPaymentId = payment?.payment_id || payment?.payment_link_id || webhookData.payment_id || webhookData.payment_link_id;
+    const referenceId = payment?.reference_id || webhookData.reference_id;
+    let paymentStatus = payment?.status || webhookData.status || 'unknown';
+    const amount = payment?.amount || webhookData.amount;
+
+    if (eventType === 'payment.succeeded' || eventType === 'payment_link.paid') {
+      paymentStatus = 'success';
+    } else if (eventType === 'payment.failed') {
+      paymentStatus = 'failed';
+    }
+
+    console.log('Webhook data - Event Type:', eventType, 'Payment ID:', gatewayPaymentId, 'Reference ID:', referenceId, 'Status:', paymentStatus);
 
     if (!referenceId && !gatewayPaymentId) {
       console.error('Missing both reference ID and payment ID in webhook');
