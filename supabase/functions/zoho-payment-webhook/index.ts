@@ -52,12 +52,8 @@ Deno.serve(async (req: Request) => {
     const payment = eventObject?.payment || webhookData.payment;
     const eventType = webhookData.event_type;
 
-    console.log('DEBUG - eventObject:', eventObject ? 'exists' : 'null');
-    console.log('DEBUG - payment:', payment ? 'exists' : 'null');
-    console.log('DEBUG - payment.payment_link_id:', payment?.payment_link_id);
-    console.log('DEBUG - payment.payment_id:', payment?.payment_id);
-
-    const gatewayPaymentId = payment?.payment_id || payment?.payment_link_id || webhookData.payment_id || webhookData.payment_link_id;
+    const paymentLinkId = payment?.payment_link_id || webhookData.payment_link_id;
+    const paymentId = payment?.payment_id || webhookData.payment_id;
     const referenceId = payment?.reference_id || payment?.transaction_reference_number || webhookData.reference_id;
     let paymentStatus = payment?.status || webhookData.status || 'unknown';
     const amount = payment?.amount || webhookData.amount;
@@ -68,10 +64,14 @@ Deno.serve(async (req: Request) => {
       paymentStatus = 'failed';
     }
 
-    console.log('Webhook data - Event Type:', eventType, 'Payment ID:', gatewayPaymentId, 'Reference ID:', referenceId, 'Status:', paymentStatus);
+    console.log('Webhook data - Event Type:', eventType);
+    console.log('Payment Link ID:', paymentLinkId);
+    console.log('Payment ID:', paymentId);
+    console.log('Reference ID:', referenceId);
+    console.log('Status:', paymentStatus);
 
-    if (!referenceId && !gatewayPaymentId) {
-      console.error('Missing both reference ID and payment ID in webhook');
+    if (!referenceId && !paymentLinkId && !paymentId) {
+      console.error('Missing all payment identifiers in webhook');
       return new Response(
         JSON.stringify({ success: false, error: 'Missing payment identifiers' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -93,33 +93,41 @@ Deno.serve(async (req: Request) => {
 
       if (paymentTransaction) {
         console.log('Found payment by reference_id:', referenceId);
-
-        if (!paymentTransaction.gateway_payment_id || paymentTransaction.gateway_payment_id.startsWith('29094000000')) {
-          await supabase
-            .from('payment_transactions')
-            .update({ gateway_payment_id: gatewayPaymentId || paymentTransaction.gateway_payment_id })
-            .eq('id', referenceId);
-        }
       }
     }
 
-    if (!paymentTransaction && gatewayPaymentId) {
+    if (!paymentTransaction && paymentLinkId) {
       const result = await supabase
         .from('payment_transactions')
         .select('*')
-        .eq('gateway_payment_id', gatewayPaymentId)
+        .eq('gateway_payment_id', paymentLinkId)
         .maybeSingle();
 
       paymentTransaction = result.data;
       fetchError = result.error;
 
       if (paymentTransaction) {
-        console.log('Found payment by gateway_payment_id:', gatewayPaymentId);
+        console.log('Found payment by payment_link_id:', paymentLinkId);
+      }
+    }
+
+    if (!paymentTransaction && paymentId) {
+      const result = await supabase
+        .from('payment_transactions')
+        .select('*')
+        .eq('gateway_payment_id', paymentId)
+        .maybeSingle();
+
+      paymentTransaction = result.data;
+      fetchError = result.error;
+
+      if (paymentTransaction) {
+        console.log('Found payment by payment_id:', paymentId);
       }
     }
 
     if (fetchError || !paymentTransaction) {
-      console.error('Payment transaction not found:', gatewayPaymentId, fetchError);
+      console.error('Payment transaction not found. Link ID:', paymentLinkId, 'Payment ID:', paymentId, 'Error:', fetchError);
       return new Response(
         JSON.stringify({ success: false, error: 'Payment transaction not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -165,7 +173,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const actualAmount = amount ? amount / 100 : paymentTransaction.amount;
+      const actualAmount = amount ? parseFloat(amount) : paymentTransaction.amount;
 
       const { data: walletTransaction, error: walletTxError } = await supabase
         .from('wallet_transactions')
@@ -174,8 +182,8 @@ Deno.serve(async (req: Request) => {
           vendor_id: paymentTransaction.vendor_id,
           transaction_type: 'credit',
           amount: actualAmount,
-          description: `${paymentTransaction.description} (Payment ID: ${gatewayPaymentId})`,
-          reference: gatewayPaymentId,
+          description: `${paymentTransaction.description} (Payment ID: ${paymentId || paymentLinkId})`,
+          reference: paymentId || paymentLinkId,
           transaction_date: new Date().toISOString().split('T')[0],
         })
         .select()
