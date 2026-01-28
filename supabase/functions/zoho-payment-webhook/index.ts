@@ -52,8 +52,13 @@ Deno.serve(async (req: Request) => {
     const payment = eventObject?.payment || webhookData.payment;
     const eventType = webhookData.event_type;
 
+    console.log('DEBUG - eventObject:', eventObject ? 'exists' : 'null');
+    console.log('DEBUG - payment:', payment ? 'exists' : 'null');
+    console.log('DEBUG - payment.payment_link_id:', payment?.payment_link_id);
+    console.log('DEBUG - payment.payment_id:', payment?.payment_id);
+
     const gatewayPaymentId = payment?.payment_id || payment?.payment_link_id || webhookData.payment_id || webhookData.payment_link_id;
-    const referenceId = payment?.reference_id || webhookData.reference_id;
+    const referenceId = payment?.reference_id || payment?.transaction_reference_number || webhookData.reference_id;
     let paymentStatus = payment?.status || webhookData.status || 'unknown';
     const amount = payment?.amount || webhookData.amount;
 
