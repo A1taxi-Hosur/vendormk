@@ -39,13 +39,12 @@ Deno.serve(async (req: Request) => {
     const webhookData = JSON.parse(requestBody);
     console.log('Zoho webhook received:', webhookData);
 
-    const paymentId = webhookData.payment?.receipt || webhookData.receipt;
-    const gatewayPaymentId = webhookData.payment?.id || webhookData.payment_id;
+    const gatewayPaymentId = webhookData.payment?.payment_id || webhookData.payment_id || webhookData.payment?.id || webhookData.id;
     const paymentStatus = webhookData.payment?.status || webhookData.status;
     const amount = webhookData.payment?.amount || webhookData.amount;
 
-    if (!paymentId) {
-      console.error('Missing payment ID in webhook');
+    if (!gatewayPaymentId) {
+      console.error('Missing gateway payment ID in webhook');
       return new Response(
         JSON.stringify({ success: false, error: 'Missing payment ID' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -55,11 +54,11 @@ Deno.serve(async (req: Request) => {
     const { data: paymentTransaction, error: fetchError } = await supabase
       .from('payment_transactions')
       .select('*')
-      .eq('id', paymentId)
+      .eq('gateway_payment_id', gatewayPaymentId)
       .maybeSingle();
 
     if (fetchError || !paymentTransaction) {
-      console.error('Payment transaction not found:', paymentId);
+      console.error('Payment transaction not found:', gatewayPaymentId, fetchError);
       return new Response(
         JSON.stringify({ success: false, error: 'Payment transaction not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -79,12 +78,11 @@ Deno.serve(async (req: Request) => {
       .from('payment_transactions')
       .update({
         status: newStatus,
-        gateway_payment_id: gatewayPaymentId || paymentTransaction.gateway_payment_id,
         completed_at: newStatus === 'success' ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
         metadata: webhookData,
       })
-      .eq('id', paymentId);
+      .eq('id', paymentTransaction.id);
 
     if (updateError) {
       console.error('Error updating payment transaction:', updateError);
@@ -130,7 +128,7 @@ Deno.serve(async (req: Request) => {
       const { error: linkError } = await supabase
         .from('payment_transactions')
         .update({ wallet_transaction_id: walletTransaction.id })
-        .eq('id', paymentId);
+        .eq('id', paymentTransaction.id);
 
       if (linkError) {
         console.error('Error linking wallet transaction:', linkError);
