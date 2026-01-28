@@ -231,40 +231,55 @@ Deno.serve(async (req: Request) => {
 async function getZohoAccessToken(
   clientId: string,
   clientSecret: string,
-  refreshToken: string
+  refreshToken: string,
+  retries: number = 3
 ): Promise<string | null> {
-  try {
-    console.log('Refreshing Zoho access token...');
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`Refreshing Zoho access token (attempt ${attempt}/${retries})...`);
 
-    const params = new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'refresh_token',
-    });
+      const params = new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token',
+      });
 
-    const response = await fetch('https://accounts.zoho.in/oauth/v2/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString(),
-    });
+      const response = await fetch('https://accounts.zoho.in/oauth/v2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
 
-    console.log('Token refresh response status:', response.status);
+      console.log('Token refresh response status:', response.status);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Failed to refresh Zoho access token. Status:', response.status);
-      console.error('Error response:', errorText);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to refresh Zoho access token. Status:', response.status);
+        console.error('Error response:', errorText);
+
+        if (attempt < retries) {
+          console.log(`Retrying in ${attempt} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+          continue;
+        }
+        return null;
+      }
+
+      const data = await response.json();
+      console.log('Token refresh successful');
+      return data.access_token;
+    } catch (error) {
+      console.error(`Error refreshing Zoho access token (attempt ${attempt}):`, error);
+      if (attempt < retries) {
+        console.log(`Retrying in ${attempt} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        continue;
+      }
       return null;
     }
-
-    const data = await response.json();
-    console.log('Token refresh successful');
-    return data.access_token;
-  } catch (error) {
-    console.error('Error refreshing Zoho access token:', error);
-    return null;
   }
+  return null;
 }
