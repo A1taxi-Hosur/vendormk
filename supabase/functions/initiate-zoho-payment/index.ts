@@ -122,7 +122,11 @@ Deno.serve(async (req: Request) => {
     const accessToken = await getZohoAccessToken(zohoClientId!, zohoClientSecret!, zohoRefreshToken!);
 
     if (!accessToken) {
-      throw new Error('Failed to obtain Zoho access token - check your OAuth credentials');
+      console.error('Failed to get access token. This could be due to:');
+      console.error('1. Expired refresh token (regenerate in Zoho Console)');
+      console.error('2. Invalid OAuth credentials');
+      console.error('3. Zoho API rate limiting');
+      throw new Error('Failed to obtain Zoho access token. Your refresh token may have expired. Please regenerate it in the Zoho Console.');
     }
 
     console.log('Access token obtained successfully:', accessToken.substring(0, 20) + '...');
