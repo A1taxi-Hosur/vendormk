@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
 
     if (TEST_MODE) {
       console.log('Running in TEST_MODE - simulating payment');
-      
+
       const { data: paymentTransaction, error: insertError } = await supabase
         .from('payment_transactions')
         .insert({
@@ -88,15 +88,40 @@ Deno.serve(async (req: Request) => {
         throw new Error('Failed to create payment transaction record');
       }
 
-      await supabase
+      const { data: wallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('id')
+        .eq('vendor_id', vendor_id)
+        .maybeSingle();
+
+      if (walletError || !wallet) {
+        console.error('Wallet not found for vendor:', vendor_id);
+        throw new Error('Wallet not found');
+      }
+
+      const { data: walletTransaction, error: walletTxError } = await supabase
         .from('wallet_transactions')
         .insert({
+          wallet_id: wallet.id,
           vendor_id: vendor_id,
           transaction_type: 'credit',
           amount: amount.toString(),
           description: description,
-          payment_transaction_id: paymentId,
-        });
+          reference: `test_${paymentId}`,
+          transaction_date: new Date().toISOString().split('T')[0],
+        })
+        .select()
+        .single();
+
+      if (walletTxError) {
+        console.error('Wallet transaction error:', walletTxError);
+        throw new Error('Failed to create wallet transaction');
+      }
+
+      await supabase
+        .from('payment_transactions')
+        .update({ wallet_transaction_id: walletTransaction.id })
+        .eq('id', paymentId);
 
       return new Response(
         JSON.stringify({
