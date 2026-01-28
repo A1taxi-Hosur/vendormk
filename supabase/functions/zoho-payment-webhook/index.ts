@@ -40,22 +40,59 @@ Deno.serve(async (req: Request) => {
     console.log('Zoho webhook received:', webhookData);
 
     const gatewayPaymentId = webhookData.payment?.payment_id || webhookData.payment_id || webhookData.payment?.id || webhookData.id;
+    const referenceId = webhookData.payment?.reference_id || webhookData.reference_id;
     const paymentStatus = webhookData.payment?.status || webhookData.status;
     const amount = webhookData.payment?.amount || webhookData.amount;
 
-    if (!gatewayPaymentId) {
-      console.error('Missing gateway payment ID in webhook');
+    console.log('Webhook data - Payment ID:', gatewayPaymentId, 'Reference ID:', referenceId, 'Status:', paymentStatus);
+
+    if (!referenceId && !gatewayPaymentId) {
+      console.error('Missing both reference ID and payment ID in webhook');
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing payment ID' }),
+        JSON.stringify({ success: false, error: 'Missing payment identifiers' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const { data: paymentTransaction, error: fetchError } = await supabase
-      .from('payment_transactions')
-      .select('*')
-      .eq('gateway_payment_id', gatewayPaymentId)
-      .maybeSingle();
+    let paymentTransaction = null;
+    let fetchError = null;
+
+    if (referenceId) {
+      const result = await supabase
+        .from('payment_transactions')
+        .select('*')
+        .eq('id', referenceId)
+        .maybeSingle();
+
+      paymentTransaction = result.data;
+      fetchError = result.error;
+
+      if (paymentTransaction) {
+        console.log('Found payment by reference_id:', referenceId);
+
+        if (!paymentTransaction.gateway_payment_id || paymentTransaction.gateway_payment_id.startsWith('29094000000')) {
+          await supabase
+            .from('payment_transactions')
+            .update({ gateway_payment_id: gatewayPaymentId || paymentTransaction.gateway_payment_id })
+            .eq('id', referenceId);
+        }
+      }
+    }
+
+    if (!paymentTransaction && gatewayPaymentId) {
+      const result = await supabase
+        .from('payment_transactions')
+        .select('*')
+        .eq('gateway_payment_id', gatewayPaymentId)
+        .maybeSingle();
+
+      paymentTransaction = result.data;
+      fetchError = result.error;
+
+      if (paymentTransaction) {
+        console.log('Found payment by gateway_payment_id:', gatewayPaymentId);
+      }
+    }
 
     if (fetchError || !paymentTransaction) {
       console.error('Payment transaction not found:', gatewayPaymentId, fetchError);
