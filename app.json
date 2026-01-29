@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "A1 Vendor",
-    "slug": "a1-vendor",
+    "slug": "vendor",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -33,7 +33,7 @@
       "supabaseUrl": "https://whubaypabojomdyfqxcf.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndodWJheXBhYm9qb21keWZxeGNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3MDYwMzEsImV4cCI6MjA3MjI4MjAzMX0.0LUHKqX1wdFnmk3KRdyv1lceMxurg_OksZKQ1apn0og",
       "eas": {
-        "projectId": "766249c2-4a24-4df3-9725-cf9e9b7d0f12"
+        "projectId": "8b75a3bb-0443-4e59-9f9e-ea4828aa99b0"
       }
     },
     "android": {
