@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, Linking } from 'react-native';
 import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react-native';
 import { supabase, Wallet as WalletType, WalletTransaction } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import Constants from 'expo-constants';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function WalletScreen() {
   const { vendor } = useAuth();
@@ -32,6 +33,59 @@ export default function WalletScreen() {
       calculateBalanceForDate(selectedDate);
     }
   }, [selectedDate, vendor]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (vendor) {
+        loadWallet();
+        loadTransactions();
+        calculateBalanceForDate(selectedDate);
+      }
+    }, [vendor, selectedDate])
+  );
+
+  useEffect(() => {
+    if (!vendor) return;
+
+    const walletChannel = supabase
+      .channel('wallet-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wallets',
+          filter: `vendor_id=eq.${vendor.vendor_id}`
+        },
+        () => {
+          loadWallet();
+          calculateBalanceForDate(selectedDate);
+        }
+      )
+      .subscribe();
+
+    const transactionsChannel = supabase
+      .channel('wallet-transactions-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wallet_transactions',
+          filter: `vendor_id=eq.${vendor.vendor_id}`
+        },
+        () => {
+          loadTransactions();
+          calculateBalanceForDate(selectedDate);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(walletChannel);
+      supabase.removeChannel(transactionsChannel);
+    };
+  }, [vendor, selectedDate]);
 
   const calculateBalanceForDate = async (date: Date) => {
     if (!vendor) return;
