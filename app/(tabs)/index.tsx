@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, Platform } from 'react-native';
-import { Car, Users, Wallet, TrendingUp, LogOut } from 'lucide-react-native';
+import { Car, Users, Wallet, LogOut } from 'lucide-react-native';
 import { supabase, Driver, Vehicle, Wallet as WalletType } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -61,6 +62,72 @@ export default function Dashboard() {
     }
   }, [vendor]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (vendor) {
+        loadAllData();
+      }
+    }, [vendor])
+  );
+
+  useEffect(() => {
+    if (!vendor) return;
+
+    const driversChannel = supabase
+      .channel('drivers-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'drivers',
+          filter: `vendor_id=eq.${vendor.vendor_id}`
+        },
+        () => {
+          loadAllData();
+        }
+      )
+      .subscribe();
+
+    const vehiclesChannel = supabase
+      .channel('vehicles-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'vehicles',
+          filter: `vendor_id=eq.${vendor.vendor_id}`
+        },
+        () => {
+          loadAllData();
+        }
+      )
+      .subscribe();
+
+    const walletTransactionsChannel = supabase
+      .channel('dashboard-wallet-transactions')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wallet_transactions',
+          filter: `vendor_id=eq.${vendor.vendor_id}`
+        },
+        () => {
+          loadAllData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(driversChannel);
+      supabase.removeChannel(vehiclesChannel);
+      supabase.removeChannel(walletTransactionsChannel);
+    };
+  }, [vendor]);
+
   const loadAllData = async () => {
     if (!vendor) return;
 
@@ -81,8 +148,12 @@ export default function Dashboard() {
         })
       ]);
 
-      if (driversData.data) setDrivers(driversData.data);
-      if (vehiclesData.data) setVehicles(vehiclesData.data);
+      if (driversData.error) console.error('Error loading drivers:', driversData.error);
+      if (vehiclesData.error) console.error('Error loading vehicles:', vehiclesData.error);
+      if (walletData.error) console.error('Error loading wallet:', walletData.error);
+
+      setDrivers(driversData.data || []);
+      setVehicles(vehiclesData.data || []);
       if (walletData.data) setWallet(walletData.data);
 
       const todayData = cumulativeBalanceData.data?.find((d: any) => d.balance_date === todayString);
@@ -183,15 +254,6 @@ export default function Dashboard() {
             <Text style={styles.statLabel}>Today's Balance</Text>
             <Text style={styles.statSubLabel}>Admin - Driver Commission</Text>
           </TouchableOpacity>
-
-          <View style={[styles.statCard, styles.infoCard]}>
-            <TrendingUp size={28} color="#FFFFFF" />
-            <Text style={styles.statNumber}>
-              ₹{parseFloat(wallet?.total_debited || '0').toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </Text>
-            <Text style={styles.statLabel}>Total Commissions</Text>
-            <Text style={styles.statSubLabel}>Lifetime paid</Text>
-          </View>
         </View>
 
         <View style={styles.section}>
@@ -356,9 +418,6 @@ const styles = StyleSheet.create({
   },
   walletCard: {
     backgroundColor: '#F59E0B',
-  },
-  infoCard: {
-    backgroundColor: '#3B82F6',
   },
   statNumber: {
     fontSize: 28,
