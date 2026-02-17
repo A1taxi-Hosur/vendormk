@@ -1,66 +1,106 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { TrendingUp, IndianRupee, Download, Calendar } from 'lucide-react-native';
-import { supabase, Commission } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
 type DailyEarning = {
   date: string;
   displayDate: string;
   dayName: string;
-  driverAllowance: number;
+  totalFares: number;
+  rideCount: number;
   commissionAmount: number;
+};
+
+type RideData = {
+  fare_amount: string;
+  created_at: string;
 };
 
 export default function Commissions() {
   const { vendor } = useAuth();
-  const [commissions, setCommissions] = useState<Commission[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyEarnings, setDailyEarnings] = useState<DailyEarning[]>([]);
 
   useEffect(() => {
     if (vendor) {
-      loadCommissions();
+      loadRideCommissions();
     } else {
       setLoading(false);
     }
   }, [vendor]);
 
-  const loadCommissions = async () => {
+  const loadRideCommissions = async () => {
     if (!vendor) return;
 
     try {
-      const { data, error } = await supabase
-        .from('commissions')
-        .select('*')
-        .eq('vendor_id', vendor.vendor_id)
-        .order('commission_date', { ascending: false });
+      const { data: drivers } = await supabase
+        .from('drivers')
+        .select('id')
+        .eq('vendor_id', vendor.vendor_id);
+
+      if (!drivers || drivers.length === 0) {
+        setDailyEarnings([]);
+        setLoading(false);
+        return;
+      }
+
+      const driverIds = drivers.map(d => d.id);
+
+      const { data: rides, error } = await supabase
+        .from('rides')
+        .select('fare_amount, created_at')
+        .in('driver_id', driverIds)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setCommissions(data || []);
-      processDailyEarnings(data || []);
+      processRideEarnings(rides || []);
     } catch (error) {
-      console.error('Error loading commissions:', error);
-      setCommissions([]);
+      console.error('Error loading ride commissions:', error);
+      setDailyEarnings([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const processDailyEarnings = (commissionsData: Commission[]) => {
-    const earnings: DailyEarning[] = commissionsData.map(commission => {
-      const date = new Date(commission.commission_date);
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const processRideEarnings = (rides: RideData[]) => {
+    const dailyMap = new Map<string, { totalFares: number; rideCount: number }>();
 
-      return {
-        date: commission.commission_date,
-        displayDate: date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
-        dayName: dayNames[date.getDay()],
-        driverAllowance: parseFloat(commission.driver_allowance || '0'),
-        commissionAmount: parseFloat(commission.commission_amount || '0'),
-      };
+    rides.forEach(ride => {
+      const date = new Date(ride.created_at);
+      const dateKey = date.toISOString().split('T')[0];
+      const fare = parseFloat(ride.fare_amount || '0');
+
+      if (dailyMap.has(dateKey)) {
+        const existing = dailyMap.get(dateKey)!;
+        dailyMap.set(dateKey, {
+          totalFares: existing.totalFares + fare,
+          rideCount: existing.rideCount + 1,
+        });
+      } else {
+        dailyMap.set(dateKey, { totalFares: fare, rideCount: 1 });
+      }
     });
+
+    const earnings: DailyEarning[] = Array.from(dailyMap.entries())
+      .map(([dateStr, data]) => {
+        const date = new Date(dateStr);
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const commission = data.totalFares * 0.11;
+
+        return {
+          date: dateStr,
+          displayDate: date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          dayName: dayNames[date.getDay()],
+          totalFares: data.totalFares,
+          rideCount: data.rideCount,
+          commissionAmount: commission,
+        };
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     setDailyEarnings(earnings);
   };
@@ -73,23 +113,25 @@ export default function Commissions() {
     const yesterdayEarning = dailyEarnings.find(e => e.date === yesterday);
 
     const last7Days = dailyEarnings.slice(0, 7);
-    const thisWeek = last7Days.reduce((sum, e) => sum + e.driverAllowance, 0);
+    const thisWeek = last7Days.reduce((sum, e) => sum + e.commissionAmount, 0);
 
     const currentMonth = new Date().getMonth();
     const thisMonth = dailyEarnings
       .filter(e => new Date(e.date).getMonth() === currentMonth)
-      .reduce((sum, e) => sum + e.driverAllowance, 0);
+      .reduce((sum, e) => sum + e.commissionAmount, 0);
 
-    const totalDriverAllowance = dailyEarnings.reduce((sum, e) => sum + e.driverAllowance, 0);
     const totalCommission = dailyEarnings.reduce((sum, e) => sum + e.commissionAmount, 0);
+    const totalFares = dailyEarnings.reduce((sum, e) => sum + e.totalFares, 0);
+    const totalRides = dailyEarnings.reduce((sum, e) => sum + e.rideCount, 0);
 
     return {
-      today: todayEarning?.driverAllowance || 0,
-      yesterday: yesterdayEarning?.driverAllowance || 0,
+      today: todayEarning?.commissionAmount || 0,
+      yesterday: yesterdayEarning?.commissionAmount || 0,
       thisWeek,
       thisMonth,
-      totalDriverAllowance,
       totalCommission,
+      totalFares,
+      totalRides,
       recordCount: dailyEarnings.length,
     };
   };
@@ -123,7 +165,7 @@ export default function Commissions() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Commissions</Text>
-          <Text style={styles.headerSubtitle}>Driver allowances owed to you</Text>
+          <Text style={styles.headerSubtitle}>11% commission from completed rides</Text>
         </View>
         <TouchableOpacity style={styles.downloadButton}>
           <Download size={16} color="#FFFFFF" />
@@ -146,7 +188,7 @@ export default function Commissions() {
               )}
             </View>
             <Text style={styles.cardAmount}>₹{totals.today.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
-            <Text style={styles.cardLabel}>Today&apos;s Driver Allowance</Text>
+            <Text style={styles.cardLabel}>Today&apos;s Commission</Text>
             <Text style={styles.cardSubLabel}>₹{totals.yesterday.toLocaleString('en-IN', { maximumFractionDigits: 2 })} yesterday</Text>
           </View>
 
@@ -154,14 +196,14 @@ export default function Commissions() {
             <IndianRupee size={24} color="#FFFFFF" />
             <Text style={styles.cardAmount}>₹{totals.thisWeek.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
             <Text style={styles.cardLabel}>Last 7 Days</Text>
-            <Text style={styles.cardSubLabel}>Driver allowances</Text>
+            <Text style={styles.cardSubLabel}>Commission earned</Text>
           </View>
 
           <View style={[styles.overviewCard, styles.infoCard]}>
             <IndianRupee size={24} color="#FFFFFF" />
             <Text style={styles.cardAmount}>₹{totals.thisMonth.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
             <Text style={styles.cardLabel}>This Month</Text>
-            <Text style={styles.cardSubLabel}>Driver allowances</Text>
+            <Text style={styles.cardSubLabel}>Commission earned</Text>
           </View>
         </View>
 
@@ -169,14 +211,14 @@ export default function Commissions() {
           <Text style={styles.sectionTitle}>Total Summary</Text>
           <View style={styles.summaryGrid}>
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Total Driver Allowances</Text>
-              <Text style={styles.summaryAmount}>₹{totals.totalDriverAllowance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
+              <Text style={styles.summaryLabel}>Total Commission</Text>
+              <Text style={styles.summaryAmount}>₹{totals.totalCommission.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
               <Text style={styles.summaryPeriod}>All Time</Text>
             </View>
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Total Records</Text>
-              <Text style={styles.summaryAmount}>{totals.recordCount}</Text>
-              <Text style={styles.summaryPeriod}>Days Tracked</Text>
+              <Text style={styles.summaryLabel}>Total Rides</Text>
+              <Text style={styles.summaryAmount}>{totals.totalRides}</Text>
+              <Text style={styles.summaryPeriod}>Completed</Text>
             </View>
           </View>
         </View>
@@ -190,8 +232,8 @@ export default function Commissions() {
           {dailyEarnings.length === 0 ? (
             <View style={styles.emptyState}>
               <Calendar size={48} color="#9CA3AF" />
-              <Text style={styles.emptyText}>No earnings data</Text>
-              <Text style={styles.emptySubtext}>Driver allowance records will appear here</Text>
+              <Text style={styles.emptyText}>No commission data</Text>
+              <Text style={styles.emptySubtext}>Complete rides to earn commissions</Text>
             </View>
           ) : (
             dailyEarnings.map((day, index) => (
@@ -202,21 +244,19 @@ export default function Commissions() {
                     <Text style={styles.dayDate}>{day.displayDate}</Text>
                   </View>
                   <View style={styles.dailyAmountInfo}>
-                    <Text style={styles.dailyAmount}>₹{day.driverAllowance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
-                    <Text style={styles.dailyLabel}>Driver Allowance</Text>
+                    <Text style={styles.dailyAmount}>₹{day.commissionAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
+                    <Text style={styles.dailyLabel}>Commission (11%)</Text>
                   </View>
                 </View>
-                {day.commissionAmount > 0 && (
-                  <View style={styles.commissionRow}>
-                    <Text style={styles.commissionLabel}>Commission</Text>
-                    <Text style={styles.commissionValue}>₹{day.commissionAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Text>
-                  </View>
-                )}
+                <View style={styles.commissionRow}>
+                  <Text style={styles.commissionLabel}>{day.rideCount} rides • ₹{day.totalFares.toLocaleString('en-IN', { maximumFractionDigits: 2 })} total fares</Text>
+                  <Text style={styles.commissionValue}>₹{(day.totalFares - day.commissionAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })} to driver</Text>
+                </View>
                 <View style={styles.dailyBar}>
                   <View
                     style={[
                       styles.dailyFill,
-                      { width: `${Math.min((day.driverAllowance / Math.max(...dailyEarnings.map(e => e.driverAllowance))) * 100, 100)}%` }
+                      { width: `${Math.min((day.commissionAmount / Math.max(...dailyEarnings.map(e => e.commissionAmount))) * 100, 100)}%` }
                     ]}
                   />
                 </View>
