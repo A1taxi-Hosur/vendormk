@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, Linking } from 'react-native';
-import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react-native';
+import { Wallet, Plus, ArrowDownLeft, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react-native';
 import { supabase, Wallet as WalletType, WalletTransaction } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import Constants from 'expo-constants';
@@ -149,6 +149,7 @@ export default function WalletScreen() {
         .from('wallet_transactions')
         .select('*')
         .eq('vendor_id', vendor.vendor_id)
+        .eq('transaction_type', 'credit')
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -445,31 +446,16 @@ export default function WalletScreen() {
           {transactions.map((transaction) => (
             <View key={transaction.id} style={styles.transactionCard}>
               <View style={styles.transactionHeader}>
-                <View
-                  style={[
-                    styles.transactionIcon,
-                    { backgroundColor: transaction.transaction_type === 'credit' ? '#D1FAE5' : '#FEE2E2' }
-                  ]}
-                >
-                  {transaction.transaction_type === 'credit' ? (
-                    <ArrowDownLeft size={20} color="#10B981" />
-                  ) : (
-                    <ArrowUpRight size={20} color="#EF4444" />
-                  )}
+                <View style={[styles.transactionIcon, { backgroundColor: '#D1FAE5' }]}>
+                  <ArrowDownLeft size={20} color="#10B981" />
                 </View>
                 <View style={styles.transactionDetails}>
                   <Text style={styles.transactionDescription}>{transaction.description}</Text>
                   <Text style={styles.transactionDate}>{formatDate(transaction.created_at)}</Text>
                 </View>
                 <View style={styles.transactionAmount}>
-                  <Text
-                    style={[
-                      styles.transactionAmountText,
-                      { color: transaction.transaction_type === 'credit' ? '#10B981' : '#EF4444' }
-                    ]}
-                  >
-                    {transaction.transaction_type === 'credit' ? '+' : '-'}₹
-                    {parseFloat(transaction.amount).toLocaleString('en-IN')}
+                  <Text style={[styles.transactionAmountText, { color: '#10B981' }]}>
+                    +₹{parseFloat(transaction.amount).toLocaleString('en-IN')}
                   </Text>
                 </View>
               </View>
