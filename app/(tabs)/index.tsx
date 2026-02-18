@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, Platform } from 'react-native';
-import { Car, Users, Wallet, LogOut } from 'lucide-react-native';
-import { supabase, Driver, Vehicle, Wallet as WalletType } from '@/lib/supabase';
+import { Users, Wallet, LogOut } from 'lucide-react-native';
+import { supabase, Driver, Wallet as WalletType } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,7 +12,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [wallet, setWallet] = useState<WalletType | null>(null);
   const [calculatedBalance, setCalculatedBalance] = useState(0);
   const [totalAllocated, setTotalAllocated] = useState(0);
@@ -89,22 +88,6 @@ export default function Dashboard() {
       )
       .subscribe();
 
-    const vehiclesChannel = supabase
-      .channel('vehicles-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'vehicles',
-          filter: `vendor_id=eq.${vendor.vendor_id}`
-        },
-        () => {
-          loadAllData();
-        }
-      )
-      .subscribe();
-
     const walletTransactionsChannel = supabase
       .channel('dashboard-wallet-transactions')
       .on(
@@ -123,7 +106,6 @@ export default function Dashboard() {
 
     return () => {
       supabase.removeChannel(driversChannel);
-      supabase.removeChannel(vehiclesChannel);
       supabase.removeChannel(walletTransactionsChannel);
     };
   }, [vendor]);
@@ -138,9 +120,8 @@ export default function Dashboard() {
       const day = String(today.getDate()).padStart(2, '0');
       const todayString = `${year}-${month}-${day}`;
 
-      const [driversData, vehiclesData, walletData, cumulativeBalanceData] = await Promise.all([
+      const [driversData, walletData, cumulativeBalanceData] = await Promise.all([
         supabase.from('drivers').select('*').eq('vendor_id', vendor.vendor_id),
-        supabase.from('vehicles').select('*').eq('vendor_id', vendor.vendor_id),
         supabase.from('wallets').select('*').eq('vendor_id', vendor.vendor_id).maybeSingle(),
         supabase.rpc('get_cumulative_wallet_balance', {
           p_vendor_id: vendor.vendor_id,
@@ -149,11 +130,9 @@ export default function Dashboard() {
       ]);
 
       if (driversData.error) console.error('Error loading drivers:', driversData.error);
-      if (vehiclesData.error) console.error('Error loading vehicles:', vehiclesData.error);
       if (walletData.error) console.error('Error loading wallet:', walletData.error);
 
       setDrivers(driversData.data || []);
-      setVehicles(vehiclesData.data || []);
       if (walletData.data) setWallet(walletData.data);
 
       const todayData = cumulativeBalanceData.data?.find((d: any) => d.balance_date === todayString);
@@ -179,10 +158,6 @@ export default function Dashboard() {
     setRefreshing(true);
     await loadAllData();
   };
-
-  const activeDrivers = drivers.filter(d => d.status === 'active').length;
-  const activeVehicles = vehicles.filter(v => v.status === 'active').length;
-  const vehiclesInMaintenance = vehicles.filter(v => v.status === 'maintenance').length;
 
   if (loading) {
     return (
@@ -224,16 +199,6 @@ export default function Dashboard() {
       >
         <View style={styles.statsContainer}>
           <TouchableOpacity
-            style={[styles.statCard, styles.primaryCard]}
-            onPress={() => router.push('/fleet')}
-          >
-            <Car size={28} color="#FFFFFF" />
-            <Text style={styles.statNumber}>{vehicles.length}</Text>
-            <Text style={styles.statLabel}>Total Vehicles</Text>
-            <Text style={styles.statSubLabel}>{activeVehicles} Active</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[styles.statCard, styles.successCard]}
             onPress={() => router.push('/drivers')}
           >
@@ -255,79 +220,11 @@ export default function Dashboard() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Fleet Overview</Text>
-          <View style={styles.overviewCard}>
-            <View style={styles.overviewRow}>
-              <View style={styles.overviewItem}>
-                <Text style={styles.overviewLabel}>Active Vehicles</Text>
-                <Text style={[styles.overviewValue, { color: '#10B981' }]}>{activeVehicles}</Text>
-              </View>
-              <View style={styles.overviewItem}>
-                <Text style={styles.overviewLabel}>Maintenance</Text>
-                <Text style={[styles.overviewValue, { color: '#F59E0B' }]}>{vehiclesInMaintenance}</Text>
-              </View>
-              <View style={styles.overviewItem}>
-                <Text style={styles.overviewLabel}>Inactive</Text>
-                <Text style={[styles.overviewValue, { color: '#EF4444' }]}>
-                  {vehicles.filter(v => v.status === 'inactive').length}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.overviewRow}>
-              <View style={styles.overviewItem}>
-                <Text style={styles.overviewLabel}>Active Drivers</Text>
-                <Text style={[styles.overviewValue, { color: '#10B981' }]}>{activeDrivers}</Text>
-              </View>
-              <View style={styles.overviewItem}>
-                <Text style={styles.overviewLabel}>Inactive Drivers</Text>
-                <Text style={[styles.overviewValue, { color: '#EF4444' }]}>
-                  {drivers.filter(d => d.status === 'inactive').length}
-                </Text>
-              </View>
-              <View style={styles.overviewItem}>
-                <Text style={styles.overviewLabel}>Vehicles/Driver</Text>
-                <Text style={[styles.overviewValue, { color: '#DC2626' }]}>
-                  {drivers.length > 0 ? (vehicles.length / drivers.length).toFixed(1) : '0'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Today's Wallet Summary</Text>
-          <View style={styles.walletSummary}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Admin Allocated</Text>
-              <Text style={styles.summaryValue}>
-                ₹{totalAllocated.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Driver Commission</Text>
-              <Text style={styles.summaryValue}>
-                ₹{totalDeducted.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { fontWeight: '700', color: '#111827' }]}>Today's Balance</Text>
-              <Text style={[styles.summaryValue, { fontWeight: '700', color: '#DC2626', fontSize: 18 }]}>
-                ₹{calculatedBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {drivers.length === 0 && vehicles.length === 0 && (
+        {drivers.length === 0 && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>Get Started</Text>
             <Text style={styles.emptyText}>
-              Add your first driver and vehicle to start managing your fleet.
+              Add your first driver to start managing your fleet.
             </Text>
             <TouchableOpacity
               style={styles.getStartedButton}
@@ -409,9 +306,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  primaryCard: {
-    backgroundColor: '#DC2626',
-  },
   successCard: {
     backgroundColor: '#10B981',
   },
@@ -436,75 +330,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     opacity: 0.8,
     marginTop: 2,
-  },
-  section: {
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  overviewCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  overviewRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  overviewItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  overviewLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  overviewValue: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 12,
-  },
-  walletSummary: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
   },
   emptyState: {
     backgroundColor: '#FFFFFF',
