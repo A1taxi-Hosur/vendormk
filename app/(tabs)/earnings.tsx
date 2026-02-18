@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { TrendingUp, IndianRupee, Download, Calendar } from 'lucide-react-native';
+import { TrendingUp, IndianRupee, Calendar } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -167,10 +167,6 @@ export default function Commissions() {
           <Text style={styles.headerTitle}>Commissions</Text>
           <Text style={styles.headerSubtitle}>11% commission from completed rides</Text>
         </View>
-        <TouchableOpacity style={styles.downloadButton}>
-          <Download size={16} color="#FFFFFF" />
-          <Text style={styles.downloadText}>Export</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -295,20 +291,7 @@ const styles = StyleSheet.create({
     color: '#FEE2E2',
     marginTop: 4,
   },
-  downloadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  downloadText: {
-    color: '#FFFFFF',
-    marginLeft: 6,
-    fontWeight: '500',
-  },
-  loadingContainer: {
+loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
