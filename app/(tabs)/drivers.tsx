@@ -1,8 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { Search, Phone, CreditCard, Car, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin } from 'lucide-react-native';
 import { supabase, DriverDailyAllowance } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+
+type ParsedDriver = {
+  id: string;
+  name: string;
+  phone: string;
+  license: string;
+  vehicle: string;
+  vehicleDetails: string;
+};
 
 type DriverWithAllowance = {
   id: string;
@@ -35,6 +44,13 @@ export default function Drivers() {
   const [expandedDriver, setExpandedDriver] = useState<string | null>(null);
   const [driverRides, setDriverRides] = useState<RideDetail[]>([]);
   const [loadingRides, setLoadingRides] = useState(false);
+  const expandedDriverRef = useRef<string | null>(null);
+  const selectedDateRef = useRef<Date>(selectedDate);
+  const driversRef = useRef<DriverWithAllowance[]>([]);
+
+  useEffect(() => { expandedDriverRef.current = expandedDriver; }, [expandedDriver]);
+  useEffect(() => { selectedDateRef.current = selectedDate; }, [selectedDate]);
+  useEffect(() => { driversRef.current = drivers; }, [drivers]);
 
   useEffect(() => {
     if (vendor) {
@@ -45,10 +61,76 @@ export default function Drivers() {
   }, [vendor]);
 
   useEffect(() => {
-    if (vendor && drivers.length > 0) {
+    if (vendor && driversRef.current.length > 0) {
       loadDriverAllowancesForDate(selectedDate);
     }
-  }, [selectedDate, drivers, vendor]);
+  }, [selectedDate, vendor]);
+
+  useEffect(() => {
+    if (!vendor) return;
+
+    const channel = supabase
+      .channel('drivers-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'commissions' }, () => {
+        refreshData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_daily_allowances' }, () => {
+        refreshData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [vendor]);
+
+  const refreshData = useCallback(async () => {
+    if (!vendor) return;
+    const currentDrivers = driversRef.current;
+    const currentDate = selectedDateRef.current;
+    const currentExpanded = expandedDriverRef.current;
+
+    if (currentDrivers.length === 0) return;
+
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const day = String(currentDate.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+
+    try {
+      const { data: dailyAmounts, error } = await supabase.rpc('get_driver_daily_amounts_for_vendor', {
+        p_vendor_id: vendor.vendor_id,
+        p_date: dateString
+      });
+
+      if (error) throw error;
+
+      const earningsMap = new Map<string, number>();
+      let total = 0;
+
+      (dailyAmounts || []).forEach((record: any) => {
+        const amount = parseFloat(record.daily_total_owed || '0');
+        earningsMap.set(record.driver_name, amount);
+        total += amount;
+      });
+
+      setTotalAllowance(total);
+      setDrivers(prev => prev.map(d => ({ ...d, allowance: earningsMap.get(d.name) || 0 })));
+
+      if (currentExpanded) {
+        const { data: rides, error: ridesError } = await supabase.rpc('get_driver_rides_by_date', {
+          p_vendor_id: vendor.vendor_id,
+          p_driver_name: currentExpanded,
+          p_date: dateString
+        });
+        if (!ridesError) {
+          setDriverRides(rides || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error refreshing driver data:', err);
+    }
+  }, [vendor]);
 
   const parseDriverDetails = (driverDetailsText: string): ParsedDriver[] => {
     if (!driverDetailsText || driverDetailsText.trim() === '' || driverDetailsText === 'EMPTY') {
@@ -95,6 +177,7 @@ export default function Drivers() {
       if (data && data.driver_details) {
         const parsedDrivers = parseDriverDetails(data.driver_details);
         setDrivers(parsedDrivers);
+        await loadDriverAllowancesForDate(selectedDate, parsedDrivers);
       } else {
         setDrivers([]);
       }
@@ -106,7 +189,7 @@ export default function Drivers() {
     }
   };
 
-  const loadDriverAllowancesForDate = async (date: Date) => {
+  const loadDriverAllowancesForDate = async (date: Date, currentDrivers?: DriverWithAllowance[]) => {
     if (!vendor) return;
 
     const year = date.getFullYear();
@@ -133,10 +216,11 @@ export default function Drivers() {
 
       setTotalAllowance(total);
 
-      const updatedDrivers = drivers.map(driver => {
-        const allowance = earningsMap.get(driver.name) || 0;
-        return { ...driver, allowance };
-      });
+      const base = currentDrivers ?? driversRef.current;
+      const updatedDrivers = base.map(driver => ({
+        ...driver,
+        allowance: earningsMap.get(driver.name) || 0,
+      }));
 
       setDrivers(updatedDrivers);
     } catch (error) {
