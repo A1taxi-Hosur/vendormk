@@ -4,12 +4,30 @@
     "slug": "vendor",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/Uselogo.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/Uselogo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "splash": {
+        "image": "./assets/images/Uselogo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "android": {
+      "package": "com.a1taxi.boltexponativewind",
+      "splash": {
+        "image": "./assets/images/Uselogo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -35,9 +53,5 @@
       "eas": {
         "projectId": "8b75a3bb-0443-4e59-9f9e-ea4828aa99b0"
       }
-    },
-    "android": {
-      "package": "com.a1taxi.boltexponativewind"
-    }
   }
 }
