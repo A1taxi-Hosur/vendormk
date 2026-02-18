@@ -240,7 +240,6 @@ export default function Dashboard() {
             <Users size={28} color="#FFFFFF" />
             <Text style={styles.statNumber}>{drivers.length}</Text>
             <Text style={styles.statLabel}>Total Drivers</Text>
-            <Text style={styles.statSubLabel}>{activeDrivers} Active</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
